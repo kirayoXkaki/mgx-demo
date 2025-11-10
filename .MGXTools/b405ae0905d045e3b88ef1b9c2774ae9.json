@@ -2,7 +2,7 @@
     "tabs": {
         "00": {
             "tab_id": "00",
-            "cwd": "/workspace/mgx_backend",
+            "cwd": "/workspace",
             "observer": {
                 "block": "Terminal",
                 "uuid": "562cc3a7-0fc4-4435-8ae3-a1a35fa679a3",
