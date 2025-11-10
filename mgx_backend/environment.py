@@ -1,6 +1,6 @@
 """Environment for role communication."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from mgx_backend.message import Message
@@ -44,11 +44,3 @@ class Environment(BaseModel):
         for role in self.roles.values():
             if not role.is_idle:
                 await role.run()
-
-
-# Avoid circular import
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from mgx_backend.role import Role
-else:
-    Any = object

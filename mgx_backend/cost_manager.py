@@ -1,5 +1,6 @@
 """Cost management for LLM API calls."""
 
+from typing import ClassVar
 from pydantic import BaseModel, Field
 
 
@@ -12,7 +13,7 @@ class CostManager(BaseModel):
     max_budget: float = 10.0
     
     # Pricing per 1K tokens (as of 2024)
-    PRICING = {
+    PRICING: ClassVar[dict] = {
         "gpt-4-turbo": {"prompt": 0.01, "completion": 0.03},
         "gpt-4": {"prompt": 0.03, "completion": 0.06},
         "gpt-3.5-turbo": {"prompt": 0.0005, "completion": 0.0015},

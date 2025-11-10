@@ -1,7 +1,7 @@
 """Architect role."""
 
 from mgx_backend.role import Role
-from mgx_backend.actions import WriteDesign
+from mgx_backend.actions.write_design import WriteDesign
 
 
 class Architect(Role):
@@ -9,10 +9,18 @@ class Architect(Role):
     
     name: str = "Bob"
     profile: str = "Architect"
-    goal: str = "Design a concise, usable, complete software system"
-    constraints: str = "Use simple architecture and appropriate open source libraries"
+    goal: str = "Design system architecture"
+    constraints: str = "Follow best practices"
     
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, **data):
+        super().__init__(**data)
         self.set_actions([WriteDesign])
         self.watch({"WritePRD"})
+    
+    def set_actions(self, actions):
+        """Set actions for this role."""
+        self.actions = [action() for action in actions]
+    
+    def watch(self, action_types):
+        """Watch for specific action types."""
+        self._watch = action_types

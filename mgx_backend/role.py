@@ -1,7 +1,7 @@
 """Base role class."""
 
 from typing import List, Set, Optional, Any
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from mgx_backend.action import Action
 from mgx_backend.message import Message
@@ -19,12 +19,12 @@ class Role(BaseModel):
     constraints: str = ""
     
     actions: List[Action] = Field(default_factory=list)
-    _watch: Set[str] = Field(default_factory=set)
-    _env: Optional[Any] = None
-    _llm: Optional[BaseLLM] = None
+    _watch: Set[str] = PrivateAttr(default_factory=set)
+    _env: Optional[Any] = PrivateAttr(default=None)
+    _llm: Optional[BaseLLM] = PrivateAttr(default=None)
     
-    _news: List[Message] = Field(default_factory=list)
-    _todo: Optional[Action] = None
+    _news: List[Message] = PrivateAttr(default_factory=list)
+    _todo: Optional[Action] = PrivateAttr(default=None)
     
     def set_actions(self, actions: List[type]):
         """Set actions for this role."""
