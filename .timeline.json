@@ -1,5 +1,5 @@
 {
-  "timeline_index": 65,
+  "timeline_index": 70,
   "planner": {
     "Team Leader": {
       "1": {
@@ -145,7 +145,12 @@
     "62": 1,
     "63": 1,
     "64": 1,
-    "65": 1
+    "65": 1,
+    "66": 1,
+    "67": 1,
+    "68": 1,
+    "69": 1,
+    "70": 1
   },
   "preview_servers": {},
   "preview_server": null,
