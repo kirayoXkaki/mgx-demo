@@ -122,13 +122,28 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
         
         # Save outputs
         repo = ProjectRepo(ctx.project_path)
+        print(f"📁 Saving outputs to: {ctx.project_path}")
+        
         for message in history:
-            if message.cause_by == "WritePRD":
-                await repo.save_prd(message.content)
-            elif message.cause_by == "WriteDesign":
-                await repo.save_design(message.content)
-            elif message.cause_by == "WriteCode":
-                await repo.save_code_files(message.content)
+            try:
+                if message.cause_by == "WritePRD":
+                    print("💾 Saving PRD...")
+                    await repo.save_prd(message.content)
+                    print("✅ PRD saved")
+                elif message.cause_by == "WriteDesign":
+                    print("💾 Saving Design...")
+                    await repo.save_design(message.content)
+                    print("✅ Design saved")
+                elif message.cause_by == "WriteCode":
+                    print("💾 Saving Code...")
+                    print(f"   Code content length: {len(message.content)}")
+                    await repo.save_code_files(message.content)
+                    print("✅ Code saved")
+            except Exception as e:
+                print(f"❌ Error saving {message.cause_by}: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
         
         tasks[task_id]["status"] = "completed"
         tasks[task_id]["progress"] = 100
@@ -220,11 +235,17 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
     websocket_connections[task_id] = websocket
     
     try:
-        # Send initial status
+        # Send initial status (format matches frontend expectations)
         if task_id in tasks:
+            task = tasks[task_id]
             await websocket.send_json({
                 "type": "status",
-                "data": tasks[task_id]
+                "status": task.get("status", "pending"),
+                "progress": task.get("progress", 0),
+                "stage": task.get("current_stage", "Queued"),
+                "cost": task.get("cost", 0.0),
+                "result": task.get("result"),
+                "error": task.get("error")
             })
         
         # Keep connection alive

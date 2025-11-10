@@ -45,36 +45,51 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         updated_at: new Date().toISOString(),
       })
       
-      // Connect WebSocket
-      const websocket = new WebSocket(`ws://localhost:8000/api/ws/${taskId}`)
+      // Connect WebSocket (use relative path to go through vite proxy)
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = `${protocol}//${window.location.host}/api/ws/${taskId}`
+      const websocket = new WebSocket(wsUrl)
+      
+      websocket.onopen = () => {
+        console.log('WebSocket connected:', taskId)
+      }
       
       websocket.onmessage = (event) => {
-        const update: ProgressUpdate = JSON.parse(event.data)
-        
-        setCurrentTask((prev) => {
-          if (!prev) return null
+        try {
+          const update: ProgressUpdate = JSON.parse(event.data)
           
-          return {
-            ...prev,
-            status: update.status || prev.status,
-            progress: update.progress || prev.progress,
-            current_stage: update.stage || prev.current_stage,
-            result: update.result || prev.result,
-            error: update.error || prev.error,
-            updated_at: new Date().toISOString(),
+          setCurrentTask((prev) => {
+            if (!prev) return null
+            
+            return {
+              ...prev,
+              status: update.status || prev.status,
+              progress: update.progress || prev.progress,
+              current_stage: update.stage || prev.current_stage,
+              result: update.result || prev.result,
+              error: update.error || prev.error,
+              updated_at: new Date().toISOString(),
+            }
+          })
+          
+          if (update.type === 'complete') {
+            setIsGenerating(false)
+            fetchFiles()
+          } else if (update.type === 'error') {
+            setIsGenerating(false)
           }
-        })
-        
-        if (update.type === 'complete') {
-          setIsGenerating(false)
-          fetchFiles()
-        } else if (update.type === 'error') {
-          setIsGenerating(false)
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error)
         }
       }
       
-      websocket.onerror = () => {
+      websocket.onerror = (error) => {
+        console.error('WebSocket error:', error)
         setIsGenerating(false)
+      }
+      
+      websocket.onclose = () => {
+        console.log('WebSocket closed')
       }
       
       setWs(websocket)
@@ -82,6 +97,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Failed to start generation:', error)
       setIsGenerating(false)
+      setCurrentTask((prev) => {
+        if (!prev) return null
+        return {
+          ...prev,
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Failed to start generation'
+        }
+      })
     }
   }, [])
 

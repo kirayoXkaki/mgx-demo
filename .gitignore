@@ -49,3 +49,18 @@ test-results/
 pnpm-lock.yaml
 *.pyc
 __pycache__
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+api.log
+
+# Generated workspace
+workspace/
+
+# Monitor scripts output
+monitor_output.txt
