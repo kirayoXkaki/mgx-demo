@@ -136,17 +136,13 @@ class ProjectRepo(BaseModel):
                 if filepath.startswith(f"{project_name}/"):
                     filepath = filepath[len(project_name) + 1:]
                 
-                # Determine if it's a source file or other file
+                # Remove src/ prefix if it exists
                 if filepath.startswith("src/"):
-                    await self.srcs.save(filepath[4:], content)
-                    print(f"   ✅ Saved: src/{filepath[4:]}")
-                else:
-                    # Save to root
-                    file_path = self.workdir / filepath
-                    file_path.parent.mkdir(parents=True, exist_ok=True)
-                    async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
-                        await f.write(content)
-                    print(f"   ✅ Saved: {filepath}")
+                    filepath = filepath[4:]
+                
+                # All code files are saved to src/ directory
+                await self.srcs.save(filepath, content)
+                print(f"   ✅ Saved: src/{filepath}")
             except Exception as e:
                 print(f"   ❌ Error saving {filepath}: {e}")
                 raise

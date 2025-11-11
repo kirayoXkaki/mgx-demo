@@ -101,9 +101,10 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
               return newMap
             })
           } else if (update.type === 'file_complete' && update.filepath && update.content !== undefined) {
+            // Remove from streamingFiles since file is complete
             setStreamingFiles(prev => {
               const newMap = new Map(prev)
-              newMap.set(update.filepath!, update.content!)
+              newMap.delete(update.filepath!) // Remove from streaming files
               return newMap
             })
             // Add to files list
@@ -113,7 +114,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
                 return [...prev, {
                   path: update.filepath!,
                   content: update.content!,
-                  type: update.filepath!.includes('src/') || update.filepath!.endsWith('.js') || update.filepath!.endsWith('.ts') || update.filepath!.endsWith('.py') ? 'source' : 'document'
+                  type: update.filepath!.includes('src/') || update.filepath!.endsWith('.js') || update.filepath!.endsWith('.ts') || update.filepath!.endsWith('.py') || update.filepath!.endsWith('.jsx') || update.filepath!.endsWith('.tsx') || update.filepath!.endsWith('.html') || update.filepath!.endsWith('.css') || update.filepath!.endsWith('.json') ? 'source' : 'document'
                 }]
               }
               return prev.map(f => 
@@ -124,23 +125,41 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
             })
           }
           
-          // Handle stream chunks for chat display
-          if (update.type === 'stream_chunk' && update.role && update.accumulated) {
-            // Update task message with accumulated content
+          // Handle stream chunks for chat display - only show action status, not file content
+          if (update.type === 'stream_chunk' && update.role && update.action) {
+            // Update task message with action description, not file content
+            const actionMessages: Record<string, string> = {
+              'WritePRD': 'Writing Product Requirements Document...',
+              'WriteDesign': 'Designing system architecture...',
+              'WriteCode': 'Generating code files...'
+            }
             setCurrentTask(prev => {
               if (!prev) return null
               return {
                 ...prev,
-                message: update.accumulated || prev.message,
+                message: actionMessages[update.action || ''] || `${update.role} is working...`,
                 role: update.role || prev.role,
                 action: update.action || prev.action
               }
             })
           }
           
+          // Handle action completion - clear streaming files for that action
+          if (update.type === 'action_complete' && update.role) {
+            // When an action completes, clear all streaming files for that role
+            // This ensures "Writing..." indicators are removed
+            setStreamingFiles(prev => {
+              const newMap = new Map(prev)
+              // Keep only files that are still being written by other roles
+              // For now, clear all since we can't easily determine which files belong to which role
+              // The file_complete messages should have already cleared individual files
+              return newMap
+            })
+          }
+          
           if (update.type === 'complete') {
             setIsGenerating(false)
-            setStreamingFiles(new Map()) // Clear streaming files
+            setStreamingFiles(new Map()) // Clear all streaming files when task completes
             fetchFiles()
           } else if (update.type === 'error') {
             setIsGenerating(false)

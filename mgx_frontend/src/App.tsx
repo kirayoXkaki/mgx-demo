@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Header } from './components/Header'
 import { ChatPanel } from './components/ChatPanel'
-import { ProgressPanel } from './components/ProgressPanel'
-import { FileExplorer } from './components/FileExplorer'
+import { FileEditor } from './components/FileEditor'
 import { TaskProvider } from './hooks/useTask'
 
 function App() {
@@ -12,8 +11,7 @@ function App() {
         <Header />
         <div className="flex-1 flex min-h-0">
           <ChatPanel />
-          <ProgressPanel />
-          <FileExplorer />
+          <FileEditor />
         </div>
       </div>
     </TaskProvider>

@@ -52,9 +52,20 @@ export function ChatPanel() {
       })
     }
     
-    // Add assistant messages based on task updates
-    if (currentTask.message || currentTask.current_stage) {
-        const newContent = currentTask.message || currentTask.current_stage
+    // Add assistant messages based on task updates - only show status, not file content
+    if (currentTask.current_stage || currentTask.message) {
+        // Prefer current_stage for status messages, fallback to message if it's a status message
+        let newContent = currentTask.current_stage || currentTask.message || ''
+        
+        // Filter out file content - only show status messages
+        // If message contains file paths or code-like content, use current_stage instead
+        if (currentTask.message && (
+          currentTask.message.includes('FILE:') || 
+          currentTask.message.includes('```') ||
+          currentTask.message.length > 200 // Long messages are likely file content
+        )) {
+          newContent = currentTask.current_stage || `${currentTask.role} is working...`
+        }
         
         // Determine message type
         let type: 'thinking' | 'working' | 'message' | 'complete' = 'message'
@@ -76,13 +87,9 @@ export function ChatPanel() {
         )
         
         if (existingMsgIndex >= 0) {
-          // Update existing message (append for working type to show progress)
+          // Update existing message with status only
           setMessages(prev => prev.map((msg, idx) => {
             if (idx === existingMsgIndex) {
-              // For working messages, show accumulated content if available
-              if (type === 'working' && currentTask.message && msg.content !== newContent) {
-                return { ...msg, content: newContent, type }
-              }
               return { ...msg, content: newContent, type }
             }
             return msg

@@ -214,8 +214,17 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
                 elif message.cause_by == "WriteCode":
                     print("💾 Saving Code...")
                     print(f"   Code content length: {len(message.content)}")
+                    print(f"   First 500 chars: {message.content[:500]}")
                     await repo.save_code_files(message.content)
                     print("✅ Code saved")
+                    # List saved files
+                    print(f"   Saved files: {repo.srcs.all_files}")
+                    # Also check root files
+                    from pathlib import Path
+                    project_root = Path(ctx.project_path)
+                    root_files = [str(f.relative_to(project_root)) for f in project_root.rglob("*") if f.is_file() and not str(f.relative_to(project_root)).startswith(('src/', 'docs/'))]
+                    if root_files:
+                        print(f"   Root files: {root_files}")
             except Exception as e:
                 print(f"❌ Error saving {message.cause_by}: {e}")
                 import traceback
@@ -371,6 +380,28 @@ async def get_files(task_id: str):
                     "content": content,
                     "type": "document"
                 })
+    
+    # Also get files from project root (non-src, non-docs files)
+    project_root = Path(project_path)
+    for file_path in project_root.rglob("*"):
+        if file_path.is_file():
+            # Skip files already in src or docs
+            rel_path = file_path.relative_to(project_root)
+            rel_path_str = str(rel_path)
+            if rel_path_str.startswith("src/") or rel_path_str.startswith("docs/"):
+                continue
+            
+            # Skip hidden files and common build artifacts
+            if rel_path.name.startswith('.') or rel_path.suffix in ['.pyc', '.pyo'] or '__pycache__' in rel_path_str:
+                continue
+            
+            content = file_path.read_text(encoding='utf-8', errors='ignore')
+            # Use normalized path (same as what's sent in streaming)
+            files.append({
+                "path": rel_path_str,
+                "content": content,
+                "type": "source" if rel_path.suffix in ['.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css', '.json'] else "document"
+            })
     
     return {"files": files}
 

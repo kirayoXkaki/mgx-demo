@@ -148,12 +148,32 @@ class Role(BaseModel):
             
             # Handle different action types
             if self._todo.name == "WriteCode":
+                # Helper function to normalize file path (same logic as project_repo.py)
+                def normalize_filepath(filepath: str) -> str:
+                    """Normalize file path to match saved path."""
+                    # Remove leading slashes
+                    filepath = filepath.lstrip('/')
+                    
+                    # Remove project name from path if it appears at the start
+                    if self._env and self._env.context:
+                        project_name = self._env.context.config.project.name
+                        if filepath.startswith(f"{project_name}/"):
+                            filepath = filepath[len(project_name) + 1:]
+                    
+                    return filepath
+                
                 # Parse FILE: markers for code generation
                 # Process accumulated content to find files
-                lines = accumulated_content.split('\n')
-                buffer = ""
+                # Only process new lines since last check to avoid reprocessing
+                new_lines = accumulated_content.split('\n')
+                if not hasattr(stream_callback, '_last_line_count'):
+                    stream_callback._last_line_count = 0
                 
-                for i, line in enumerate(lines):
+                # Process only new lines
+                lines_to_process = new_lines[stream_callback._last_line_count:]
+                stream_callback._last_line_count = len(new_lines)
+                
+                for line in lines_to_process:
                     if line.startswith('FILE:'):
                         # Save previous file if exists
                         if current_file and current_content.get(current_file):
@@ -161,62 +181,82 @@ class Role(BaseModel):
                             if self._env and self._env.context:
                                 callback = self._env.context.kwargs.get("progress_callback")
                                 if callback:
+                                    normalized_path = normalize_filepath(current_file)
                                     await callback({
                                         "type": "file_content",
-                                        "filepath": current_file,
+                                        "filepath": normalized_path,
                                         "content": current_content[current_file]
                                     })
                         
                         # New file detected
-                        filepath = line.replace('FILE:', '').strip()
-                        current_file = filepath
+                        raw_filepath = line.replace('FILE:', '').strip()
+                        # Normalize the filepath to match what will be saved
+                        normalized_filepath = normalize_filepath(raw_filepath)
+                        current_file = normalized_filepath
                         in_file_content = False
-                        if filepath not in current_content:
-                            current_content[filepath] = ""
+                        if normalized_filepath not in current_content:
+                            current_content[normalized_filepath] = ""
                             import time
-                            last_update_time[filepath] = time.time()
+                            last_update_time[normalized_filepath] = time.time()
                             
-                            # Send file update
+                            # Send file update with normalized path
                             if self._env and self._env.context:
                                 callback = self._env.context.kwargs.get("progress_callback")
                                 if callback:
+                                    print(f"📝 [Stream] New file detected: {normalized_filepath}")
                                     await callback({
                                         "type": "file_update",
                                         "role": self.name,
-                                        "filepath": filepath,
+                                        "filepath": normalized_filepath,
                                         "action": "creating"
                                     })
                     elif current_file and line.strip() == '---':
                         # Toggle file content marker
                         in_file_content = not in_file_content
-                    elif current_file and in_file_content:
-                        # Accumulate file content
-                        current_content[current_file] += line + '\n'
+                    elif current_file:
+                        # If we have a current file, accumulate content
+                        # Handle both cases: with --- markers and without
+                        should_collect = False
+                        if in_file_content:
+                            should_collect = True
+                        elif not in_file_content and line.strip() and not line.startswith('FILE:'):
+                            # If not in content mode but line is not empty and not FILE marker, start collecting
+                            in_file_content = True
+                            should_collect = True
                         
-                        # Send incremental file content update (more frequent: every 50 chars or 0.3 seconds)
-                        import time
-                        now = time.time()
-                        last_update = last_file_update.get(current_file, 0)
-                        content_length = len(current_content[current_file])
-                        last_length = last_file_update.get(f"{current_file}_len", 0)
-                        
-                        # Update if 50+ chars added or 0.3+ seconds passed
-                        if (content_length - last_length > 50 or now - last_update > 0.3):
-                            last_file_update[current_file] = now
-                            last_file_update[f"{current_file}_len"] = content_length
-                            if self._env and self._env.context:
-                                callback = self._env.context.kwargs.get("progress_callback")
-                                if callback:
-                                    await callback({
-                                        "type": "file_content",
-                                        "filepath": current_file,
-                                        "content": current_content[current_file]
-                                    })
+                        if should_collect:
+                            # Accumulate file content
+                            current_content[current_file] += line + '\n'
+                            
+                            # Send incremental file content update (more frequent: every 50 chars or 0.3 seconds)
+                            import time
+                            now = time.time()
+                            last_update = last_file_update.get(current_file, 0)
+                            content_length = len(current_content[current_file])
+                            last_length = last_file_update.get(f"{current_file}_len", 0)
+                            
+                            # Update if 50+ chars added or 0.3+ seconds passed
+                            if (content_length - last_length > 50 or now - last_update > 0.3):
+                                last_file_update[current_file] = now
+                                last_file_update[f"{current_file}_len"] = content_length
+                                if self._env and self._env.context:
+                                    callback = self._env.context.kwargs.get("progress_callback")
+                                    if callback:
+                                        # Use normalized path
+                                        normalized_path = normalize_filepath(current_file) if current_file else current_file
+                                        await callback({
+                                            "type": "file_content",
+                                            "filepath": normalized_path,
+                                            "content": current_content[current_file]
+                                        })
             elif self._todo.name in ["WritePRD", "WriteDesign"]:
                 # For PRD and Design, treat the entire content as a document file
                 # Create a virtual file for the document
-                doc_filename = "prd.md" if self._todo.name == "WritePRD" else "system_design.md"
-                doc_path = f"docs/{doc_filename}"
+                # Match the actual saved path structure
+                if self._todo.name == "WritePRD":
+                    doc_path = "docs/prd/prd.md"
+                else:
+                    doc_path = "docs/system_design/system_design.md"
                 
                 if doc_path not in current_content:
                     current_content[doc_path] = ""
@@ -265,12 +305,28 @@ class Role(BaseModel):
             if self._env and self._env.context:
                 callback = self._env.context.kwargs.get("progress_callback")
                 if callback:
+                    print(f"📦 [Stream] Sending {len(current_content)} file(s) as complete")
                     for filepath, content in current_content.items():
+                        # Normalize path for WriteCode files
+                        if self._todo.name == "WriteCode":
+                            def normalize_filepath(filepath: str) -> str:
+                                filepath = filepath.lstrip('/')
+                                if self._env and self._env.context:
+                                    project_name = self._env.context.config.project.name
+                                    if filepath.startswith(f"{project_name}/"):
+                                        filepath = filepath[len(project_name) + 1:]
+                                return filepath
+                            normalized_path = normalize_filepath(filepath)
+                        else:
+                            normalized_path = filepath
+                        # Send file_complete message
+                        print(f"   ✅ [Stream] File complete: {normalized_path} ({len(content)} chars)")
                         await callback({
                             "type": "file_complete",
-                            "filepath": filepath,
+                            "filepath": normalized_path,
                             "content": content
                         })
+        
         
         # Send progress update: action completed
         if self._env and self._env.context:
