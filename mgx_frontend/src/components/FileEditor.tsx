@@ -152,7 +152,12 @@ export function FileEditor() {
   // Get file content
   const getFileContent = (filepath: string) => {
     if (streamingFiles.has(filepath)) {
-      return streamingFiles.get(filepath) || ''
+      const content = streamingFiles.get(filepath) || ''
+      // Debug: log when getting streaming content
+      if (content.length > 0 && content.length % 100 === 0) {
+        console.log('📖 [FileEditor] Getting streaming content for', filepath, 'length:', content.length)
+      }
+      return content
     }
     const file = files.find(f => f.path === filepath)
     return file?.content || ''

@@ -67,30 +67,63 @@ class OpenAILLM(BaseLLM):
         try:
             # Use streaming if callback is provided
             if stream_callback:
+                # IMPORTANT: Set max_tokens to None (no limit) for code generation
+                # This ensures complete code generation without truncation
+                max_tokens_for_request = None  # No limit for streaming
+                
                 stream = await self._client.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     temperature=self.temperature,
-                    max_tokens=self.max_tokens,
+                    max_tokens=max_tokens_for_request,  # None means no limit
                     stream=True,
                 )
                 
                 full_content = ""
                 prompt_tokens_estimate = sum(len(msg["content"].split()) * 1.3 for msg in messages)  # Rough estimate
                 completion_tokens = 0
+                chunk_count = 0
+                finish_reason = None
                 
                 async for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        full_content += content
-                        completion_tokens += len(content.split())  # Rough token estimate
-                        if stream_callback:
-                            await stream_callback(content)
+                    chunk_count += 1
+                    
+                    # Check for content in chunk
+                    if chunk.choices and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta
+                        if delta and delta.content:
+                            content = delta.content
+                            full_content += content
+                            completion_tokens += len(content.split())  # Rough token estimate
+                            if stream_callback:
+                                try:
+                                    await stream_callback(content)
+                                except Exception as e:
+                                    print(f"⚠️  [LLM] stream_callback error: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                                    # Continue streaming even if callback fails
+                        
+                        # Check finish_reason in final chunk
+                        if chunk.choices[0].finish_reason:
+                            finish_reason = chunk.choices[0].finish_reason
                     
                     # Get usage from final chunk if available
                     if chunk.usage:
                         prompt_tokens_estimate = chunk.usage.prompt_tokens
                         completion_tokens = chunk.usage.completion_tokens
+                
+                # Log finish reason for debugging
+                if finish_reason:
+                    if finish_reason == "length":
+                        print(f"⚠️  [LLM] Stream finished due to token limit! Received {chunk_count} chunks, content length: {len(full_content)}")
+                        print(f"⚠️  [LLM] This may cause incomplete code generation. Consider increasing max_tokens or setting it to None.")
+                    elif finish_reason == "stop":
+                        print(f"✅ [LLM] Stream completed normally. Received {chunk_count} chunks, total content length: {len(full_content)}")
+                    else:
+                        print(f"⚠️  [LLM] Stream finished with reason: {finish_reason}, chunks: {chunk_count}, content length: {len(full_content)}")
+                else:
+                    print(f"📊 [LLM] Stream completed. Received {chunk_count} chunks, total content length: {len(full_content)}")
                 
                 # Update cost with estimated tokens
                 if self.cost_manager:

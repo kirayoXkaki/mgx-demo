@@ -79,10 +79,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           
           // Handle file updates for real-time code/document display
           if (update.type === 'file_update' && update.filepath) {
+            console.log('📝 [Frontend] file_update received:', update.filepath)
             setStreamingFiles(prev => {
               const newMap = new Map(prev)
               if (!newMap.has(update.filepath!)) {
                 newMap.set(update.filepath!, '')
+                console.log('📝 [Frontend] Added to streamingFiles:', update.filepath)
               }
               return newMap
             })
@@ -95,9 +97,11 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
               }, 100)
             }
           } else if (update.type === 'file_content' && update.filepath && update.content !== undefined) {
+            console.log('📝 [Frontend] file_content received:', update.filepath, 'length:', update.content?.length)
             setStreamingFiles(prev => {
               const newMap = new Map(prev)
               newMap.set(update.filepath!, update.content!)
+              console.log('📝 [Frontend] Updated streamingFiles, now has', newMap.size, 'files')
               return newMap
             })
           } else if (update.type === 'file_complete' && update.filepath && update.content !== undefined) {
