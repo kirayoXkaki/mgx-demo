@@ -64,10 +64,13 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
             return {
               ...prev,
               status: update.status || prev.status,
-              progress: update.progress || prev.progress,
+              progress: update.progress !== undefined ? update.progress : prev.progress,
               current_stage: update.stage || prev.current_stage,
               result: update.result || prev.result,
               error: update.error || prev.error,
+              message: update.message || prev.message,
+              role: update.role || prev.role,
+              action: update.action || prev.action,
               updated_at: new Date().toISOString(),
             }
           })

@@ -94,33 +94,94 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
             "progress": 20
         })
         
-        # Run the team
-        tasks[task_id]["current_stage"] = "ProductManager: Writing PRD"
-        history = await team.run(n_round=n_round, idea=idea)
-        
-        # Track progress through stages
-        for i, msg in enumerate(history):
-            progress = 20 + int((i / len(history)) * 60)
-            tasks[task_id]["progress"] = progress
+        # Progress callback for real-time updates
+        async def progress_callback(update: dict):
+            """Callback for progress updates from team execution."""
+            update_type = update.get("type", "progress")
+            role = update.get("role", "")
+            action = update.get("action", "")
+            stage = update.get("stage", "")
+            message = update.get("message", "")
             
-            if msg.cause_by == "WritePRD":
-                stage = "ProductManager: PRD completed"
-            elif msg.cause_by == "WriteDesign":
-                stage = "Architect: System design completed"
-            elif msg.cause_by == "WriteCode":
-                stage = "Engineer: Code implementation completed"
+            # Calculate progress based on role and action
+            base_progress = 20
+            if role == "ProductManager":
+                if update_type == "thinking":
+                    progress = 25
+                elif update_type == "action_start" and action == "WritePRD":
+                    progress = 30
+                elif update_type == "action_executing":
+                    progress = 35
+                elif update_type == "action_complete":
+                    progress = 40
+                else:
+                    progress = 30
+            elif role == "Architect":
+                if update_type == "thinking":
+                    progress = 50
+                elif update_type == "action_start" and action == "WriteDesign":
+                    progress = 55
+                elif update_type == "action_executing":
+                    progress = 60
+                elif update_type == "action_complete":
+                    progress = 65
+                else:
+                    progress = 55
+            elif role == "Engineer":
+                if update_type == "thinking":
+                    progress = 70
+                elif update_type == "action_start" and action == "WriteCode":
+                    progress = 75
+                elif update_type == "action_executing":
+                    progress = 80
+                elif update_type == "action_complete":
+                    progress = 85
+                else:
+                    progress = 75
             else:
-                stage = f"Processing: {msg.role}"
+                progress = tasks[task_id].get("progress", 20)
             
+            tasks[task_id]["progress"] = progress
             tasks[task_id]["current_stage"] = stage
+            
             await send_progress(task_id, {
-                "type": "progress",
+                "type": update_type,
+                "role": role,
+                "action": action,
                 "stage": stage,
                 "progress": progress,
-                "message": msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+                "message": message
             })
         
+        # Run the team with progress callback
+        tasks[task_id]["current_stage"] = "Starting team collaboration..."
+        history = await team.run(n_round=n_round, idea=idea, progress_callback=progress_callback)
+        
+        # Track final progress through completed messages
+        for i, msg in enumerate(history):
+            if msg.cause_by == "WritePRD":
+                stage = "ProductManager: PRD completed ✓"
+            elif msg.cause_by == "WriteDesign":
+                stage = "Architect: System design completed ✓"
+            elif msg.cause_by == "WriteCode":
+                stage = "Engineer: Code implementation completed ✓"
+            else:
+                stage = f"{msg.role}: Completed"
+            
+            progress = 20 + int((i / len(history)) * 60)
+            tasks[task_id]["progress"] = min(progress, 90)  # Cap at 90% until saving
+            tasks[task_id]["current_stage"] = stage
+        
         # Save outputs
+        tasks[task_id]["current_stage"] = "Saving project files..."
+        tasks[task_id]["progress"] = 90
+        await send_progress(task_id, {
+            "type": "saving",
+            "stage": "Saving project files...",
+            "progress": 90,
+            "message": "Saving generated files to project directory"
+        })
+        
         repo = ProjectRepo(ctx.project_path)
         print(f"📁 Saving outputs to: {ctx.project_path}")
         

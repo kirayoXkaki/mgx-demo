@@ -55,8 +55,14 @@ class Team(BaseModel):
         import asyncio
         asyncio.create_task(self.env.publish_message(message))
     
-    async def run(self, n_round: int = 5, idea: str = ""):
-        """Run the team for n rounds."""
+    async def run(self, n_round: int = 5, idea: str = "", progress_callback=None):
+        """Run the team for n rounds.
+        
+        Args:
+            n_round: Number of rounds to run
+            idea: Project idea
+            progress_callback: Callback function(task_id, update_dict) for progress updates
+        """
         if idea:
             self.idea = idea
             message = UserRequirement(content=idea)
@@ -65,6 +71,10 @@ class Team(BaseModel):
         print(f"\n🚀 Starting project: {self.idea}")
         print(f"👥 Team members: {', '.join([r.name for r in self.env.get_roles()])}")
         print(f"💰 Budget: ${self.investment}\n")
+        
+        # Store progress callback in environment context
+        if progress_callback:
+            self.env.context.kwargs.set("progress_callback", progress_callback)
         
         round_num = 0
         while n_round > 0:

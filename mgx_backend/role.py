@@ -59,9 +59,33 @@ class Role(BaseModel):
         if not self._news:
             return False
         
+        # Send progress update: role is thinking
+        if self._env and self._env.context:
+            callback = self._env.context.kwargs.get("progress_callback")
+            if callback:
+                await callback({
+                    "type": "thinking",
+                    "role": self.name,
+                    "stage": f"{self.name}: Thinking about next action...",
+                    "message": f"{self.name} is analyzing requirements and deciding what to do next"
+                })
+        
         # Simple strategy: execute actions in order
         if self.actions:
             self._todo = self.actions[0]
+            
+            # Send progress update: role decided to act
+            if self._env and self._env.context:
+                callback = self._env.context.kwargs.get("progress_callback")
+                if callback:
+                    await callback({
+                        "type": "action_start",
+                        "role": self.name,
+                        "action": self._todo.name,
+                        "stage": f"{self.name}: Starting {self._todo.name}...",
+                        "message": f"{self.name} is starting to {self._todo.name.lower().replace('write', 'write').replace('code', 'implement code')}"
+                    })
+            
             return True
         
         return False
@@ -71,11 +95,35 @@ class Role(BaseModel):
         if not self._todo:
             return None
         
+        # Send progress update: action executing
+        if self._env and self._env.context:
+            callback = self._env.context.kwargs.get("progress_callback")
+            if callback:
+                await callback({
+                    "type": "action_executing",
+                    "role": self.name,
+                    "action": self._todo.name,
+                    "stage": f"{self.name}: Executing {self._todo.name}...",
+                    "message": f"{self.name} is working on {self._todo.name.lower().replace('write', 'writing').replace('code', 'code implementation')}"
+                })
+        
         # Get context from news
         context = "\n".join([msg.content for msg in self._news])
         
         # Execute action
         result = await self._todo.run(context)
+        
+        # Send progress update: action completed
+        if self._env and self._env.context:
+            callback = self._env.context.kwargs.get("progress_callback")
+            if callback:
+                await callback({
+                    "type": "action_complete",
+                    "role": self.name,
+                    "action": self._todo.name,
+                    "stage": f"{self.name}: {self._todo.name} completed",
+                    "message": f"{self.name} has completed {self._todo.name.lower()}"
+                })
         
         # Create output message
         message = Message(

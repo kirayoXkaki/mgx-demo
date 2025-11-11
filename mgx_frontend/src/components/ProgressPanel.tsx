@@ -1,12 +1,12 @@
-import { CheckCircle2, Circle, Loader2 } from 'lucide-react'
+import { CheckCircle2, Circle, Loader2, Brain, FileText, Code } from 'lucide-react'
 import { useTask } from '../hooks/useTask'
 import { Progress } from './ui/progress'
 import { ScrollArea } from './ui/scroll-area'
 
 const stages = [
-  { id: 'pm', name: 'Product Manager', description: 'Writing PRD' },
-  { id: 'arch', name: 'Architect', description: 'Designing system' },
-  { id: 'eng', name: 'Engineer', description: 'Implementing code' },
+  { id: 'pm', name: 'Product Manager', description: 'Writing PRD', icon: FileText },
+  { id: 'arch', name: 'Architect', description: 'Designing system', icon: FileText },
+  { id: 'eng', name: 'Engineer', description: 'Implementing code', icon: Code },
 ]
 
 export function ProgressPanel() {
@@ -19,6 +19,44 @@ export function ProgressPanel() {
     if (stage.includes('architect') || stage.includes('design')) return 1
     if (stage.includes('engineer') || stage.includes('code')) return 2
     return -1
+  }
+
+  const getStageStatus = (stageId: string) => {
+    if (!currentTask) return 'pending'
+    const stage = currentTask.current_stage.toLowerCase()
+    const role = currentTask.current_stage.split(':')[0]?.toLowerCase() || ''
+    
+    if (stageId === 'pm') {
+      if (role.includes('product') || stage.includes('prd')) {
+        if (stage.includes('thinking')) return 'thinking'
+        if (stage.includes('starting')) return 'starting'
+        if (stage.includes('executing')) return 'executing'
+        if (stage.includes('completed') || stage.includes('complete')) return 'completed'
+        return 'active'
+      }
+      if (getCurrentStageIndex() > 0) return 'completed'
+    } else if (stageId === 'arch') {
+      if (role.includes('architect') || stage.includes('design')) {
+        if (stage.includes('thinking')) return 'thinking'
+        if (stage.includes('starting')) return 'starting'
+        if (stage.includes('executing')) return 'executing'
+        if (stage.includes('completed') || stage.includes('complete')) return 'completed'
+        return 'active'
+      }
+      if (getCurrentStageIndex() > 1) return 'completed'
+      if (getCurrentStageIndex() === 1) return 'active'
+    } else if (stageId === 'eng') {
+      if (role.includes('engineer') || stage.includes('code')) {
+        if (stage.includes('thinking')) return 'thinking'
+        if (stage.includes('starting')) return 'starting'
+        if (stage.includes('executing')) return 'executing'
+        if (stage.includes('completed') || stage.includes('complete')) return 'completed'
+        return 'active'
+      }
+      if (getCurrentStageIndex() === 2) return 'active'
+    }
+    
+    return 'pending'
   }
 
   const currentStageIndex = getCurrentStageIndex()
@@ -53,9 +91,14 @@ export function ProgressPanel() {
       <ScrollArea className="flex-1 p-6">
         <div className="space-y-6">
           {stages.map((stage, index) => {
-            const isCompleted = currentTask && currentStageIndex > index
-            const isActive = currentTask && currentStageIndex === index
-            const isPending = !currentTask || currentStageIndex < index
+            const status = getStageStatus(stage.id)
+            const StageIcon = stage.icon
+            const isCompleted = status === 'completed'
+            const isActive = status === 'active' || status === 'thinking' || status === 'starting' || status === 'executing'
+            const isPending = status === 'pending'
+            const isThinking = status === 'thinking'
+            const isStarting = status === 'starting'
+            const isExecuting = status === 'executing'
             
             return (
               <div key={stage.id} className="flex gap-4">
@@ -63,7 +106,10 @@ export function ProgressPanel() {
                   {isCompleted && (
                     <CheckCircle2 className="w-6 h-6 text-green-500" />
                   )}
-                  {isActive && (
+                  {isThinking && (
+                    <Brain className="w-6 h-6 text-blue-500 animate-pulse" />
+                  )}
+                  {(isStarting || isExecuting) && (
                     <Loader2 className="w-6 h-6 text-primary animate-spin" />
                   )}
                   {isPending && (
@@ -72,28 +118,90 @@ export function ProgressPanel() {
                   {index < stages.length - 1 && (
                     <div
                       className={`w-0.5 h-16 mt-2 ${
-                        isCompleted ? 'bg-green-500' : 'bg-border'
+                        isCompleted ? 'bg-green-500' : isActive ? 'bg-primary/30' : 'bg-border'
                       }`}
                     />
                   )}
                 </div>
                 
                 <div className="flex-1 pb-8">
-                  <h3 className={`font-medium mb-1 ${
-                    isActive ? 'text-primary' : isPending ? 'text-muted-foreground' : ''
-                  }`}>
-                    {stage.name}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {stage.description}
-                  </p>
-                  {isActive && currentTask && (
+                  <div className="flex items-center gap-2 mb-1">
+                    <StageIcon className={`w-4 h-4 ${
+                      isActive ? 'text-primary' : isPending ? 'text-muted-foreground' : 'text-green-500'
+                    }`} />
+                    <h3 className={`font-medium ${
+                      isActive ? 'text-primary' : isPending ? 'text-muted-foreground' : ''
+                    }`}>
+                      {stage.name}
+                    </h3>
+                  </div>
+                  
+                  {isPending && (
+                    <p className="text-sm text-muted-foreground">
+                      {stage.description}
+                    </p>
+                  )}
+                  
+                  {isThinking && currentTask && (
+                    <div className="mt-2 space-y-2">
+                      <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md">
+                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                          <Brain className="w-4 h-4" />
+                          Thinking...
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                          {currentTask.current_stage}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {isStarting && currentTask && (
+                    <div className="mt-2 space-y-2">
+                      <div className="p-3 bg-primary/10 border border-primary/20 rounded-md">
+                        <p className="text-sm font-medium text-primary flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Starting...
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {currentTask.current_stage}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {isExecuting && currentTask && (
+                    <div className="mt-2 space-y-2">
+                      <div className="p-3 bg-primary/10 border border-primary/20 rounded-md">
+                        <p className="text-sm font-medium text-primary flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Working...
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {currentTask.current_stage}
+                        </p>
+                        {currentTask.message && (
+                          <p className="text-xs text-muted-foreground mt-2 italic">
+                            {currentTask.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {isActive && !isThinking && !isStarting && !isExecuting && currentTask && (
                     <div className="mt-2 p-3 bg-secondary rounded-md">
                       <p className="text-sm">{currentTask.current_stage}</p>
                     </div>
                   )}
+                  
                   {isCompleted && (
-                    <p className="text-sm text-green-600 mt-2">✓ Completed</p>
+                    <div className="mt-2 p-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-md">
+                      <p className="text-sm text-green-700 dark:text-green-300 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Completed
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>

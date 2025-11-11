@@ -9,6 +9,9 @@ export interface Task {
   n_round: number
   result?: TaskResult
   error?: string
+  message?: string
+  role?: string
+  action?: string
   created_at: string
   updated_at: string
 }
@@ -28,11 +31,13 @@ export interface FileItem {
 }
 
 export interface ProgressUpdate {
-  type: 'status' | 'progress' | 'complete' | 'error'
+  type: 'status' | 'progress' | 'complete' | 'error' | 'thinking' | 'action_start' | 'action_executing' | 'action_complete' | 'saving'
   status?: string
   stage?: string
   progress?: number
   message?: string
+  role?: string
+  action?: string
   result?: TaskResult
   error?: string
 }
