@@ -1,5 +1,6 @@
 """Write Product Requirements Document action."""
 
+from typing import Optional
 from mgx_backend.action import Action
 
 
@@ -57,8 +58,8 @@ Please be specific, detailed, and actionable. The PRD should be clear enough for
 
 Output the PRD in markdown format."""
     
-    async def run(self, context: str) -> str:
+    async def run(self, context: str, stream_callback: Optional[callable] = None) -> str:
         """Execute WritePRD action."""
         prompt = self.build_prompt(context)
-        prd = await self.llm.ask(prompt)
+        prd = await self.llm.ask(prompt, stream_callback=stream_callback)
         return prd

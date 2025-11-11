@@ -1,5 +1,6 @@
 """Write Code action."""
 
+from typing import Optional
 from mgx_backend.action import Action
 
 
@@ -61,8 +62,8 @@ FILE: path/to/file2.ext
 
 Make sure every file is complete and functional. The code should be ready to run after following the setup instructions."""
     
-    async def run(self, context: str) -> str:
+    async def run(self, context: str, stream_callback: Optional[callable] = None) -> str:
         """Execute WriteCode action."""
         prompt = self.build_prompt(context)
-        code = await self.llm.ask(prompt)
+        code = await self.llm.ask(prompt, stream_callback=stream_callback)
         return code

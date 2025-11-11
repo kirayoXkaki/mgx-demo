@@ -18,8 +18,13 @@ class Action(BaseModel):
         """Set LLM instance."""
         self.llm = llm
     
-    async def run(self, context: str) -> str:
-        """Execute the action."""
+    async def run(self, context: str, stream_callback: Optional[callable] = None) -> str:
+        """Execute the action.
+        
+        Args:
+            context: Context for the action
+            stream_callback: Optional callback function(chunk: str) for streaming output
+        """
         raise NotImplementedError
     
     def build_prompt(self, context: str, **kwargs) -> str:

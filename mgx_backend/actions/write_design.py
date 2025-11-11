@@ -1,5 +1,6 @@
 """Write System Design action."""
 
+from typing import Optional
 from mgx_backend.action import Action
 
 
@@ -66,8 +67,8 @@ Please be specific and technical. The design should be detailed enough for engin
 
 Output the design document in markdown format."""
     
-    async def run(self, context: str) -> str:
+    async def run(self, context: str, stream_callback: Optional[callable] = None) -> str:
         """Execute WriteDesign action."""
         prompt = self.build_prompt(context)
-        design = await self.llm.ask(prompt)
+        design = await self.llm.ask(prompt, stream_callback=stream_callback)
         return design

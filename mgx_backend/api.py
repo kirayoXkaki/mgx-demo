@@ -144,14 +144,30 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
             tasks[task_id]["progress"] = progress
             tasks[task_id]["current_stage"] = stage
             
-            await send_progress(task_id, {
+            # Include additional fields for chat and file updates
+            progress_data = {
                 "type": update_type,
                 "role": role,
                 "action": action,
                 "stage": stage,
                 "progress": progress,
                 "message": message
-            })
+            }
+            
+            # Add stream chunk data
+            if update_type == "stream_chunk":
+                progress_data["chunk"] = update.get("chunk", "")
+                progress_data["accumulated"] = update.get("accumulated", "")
+            
+            # Add file update data
+            if update_type in ["file_update", "file_content", "file_complete"]:
+                progress_data["filepath"] = update.get("filepath", "")
+                if update_type in ["file_content", "file_complete"]:
+                    progress_data["content"] = update.get("content", "")
+                if update_type == "file_update":
+                    progress_data["file_action"] = update.get("action", "creating")
+            
+            await send_progress(task_id, progress_data)
         
         # Run the team with progress callback
         tasks[task_id]["current_stage"] = "Starting team collaboration..."

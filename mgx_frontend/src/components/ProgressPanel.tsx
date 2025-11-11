@@ -62,8 +62,8 @@ export function ProgressPanel() {
   const currentStageIndex = getCurrentStageIndex()
 
   return (
-    <div className="flex-1 flex flex-col bg-background">
-      <div className="p-6 border-b border-border">
+    <div className="flex-1 flex flex-col bg-background min-h-0">
+      <div className="flex-shrink-0 p-6 border-b border-border">
         <h2 className="font-semibold text-lg mb-4">Generation Progress</h2>
         
         {currentTask ? (
@@ -88,7 +88,8 @@ export function ProgressPanel() {
         )}
       </div>
       
-      <ScrollArea className="flex-1 p-6">
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="h-full p-6">
         <div className="space-y-6">
           {stages.map((stage, index) => {
             const status = getStageStatus(stage.id)
@@ -221,7 +222,8 @@ export function ProgressPanel() {
             </div>
           </div>
         )}
-      </ScrollArea>
+        </ScrollArea>
+      </div>
     </div>
   )
 }

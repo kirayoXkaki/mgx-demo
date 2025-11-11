@@ -8,9 +8,9 @@ import { TaskProvider } from './hooks/useTask'
 function App() {
   return (
     <TaskProvider>
-      <div className="h-screen flex flex-col bg-background">
+      <div className="h-screen flex flex-col bg-background overflow-hidden">
         <Header />
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex min-h-0">
           <ChatPanel />
           <ProgressPanel />
           <FileExplorer />

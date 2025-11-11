@@ -5,6 +5,7 @@ interface TaskContextType {
   currentTask: Task | null
   files: FileItem[]
   isGenerating: boolean
+  streamingFiles: Map<string, string> // filepath -> content (for real-time updates)
   startGeneration: (idea: string, investment: number) => Promise<void>
   fetchFiles: () => Promise<void>
   downloadProject: () => Promise<void>
@@ -17,6 +18,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const [files, setFiles] = useState<FileItem[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [ws, setWs] = useState<WebSocket | null>(null)
+  const [streamingFiles, setStreamingFiles] = useState<Map<string, string>>(new Map())
 
   const startGeneration = useCallback(async (idea: string, investment: number) => {
     setIsGenerating(true)
@@ -75,11 +77,74 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
             }
           })
           
+          // Handle file updates for real-time code/document display
+          if (update.type === 'file_update' && update.filepath) {
+            setStreamingFiles(prev => {
+              const newMap = new Map(prev)
+              if (!newMap.has(update.filepath!)) {
+                newMap.set(update.filepath!, '')
+              }
+              return newMap
+            })
+            // Auto-select the new file
+            if (update.filepath) {
+              // Trigger file selection in FileExplorer
+              setTimeout(() => {
+                const event = new CustomEvent('fileSelected', { detail: { filepath: update.filepath } })
+                window.dispatchEvent(event)
+              }, 100)
+            }
+          } else if (update.type === 'file_content' && update.filepath && update.content !== undefined) {
+            setStreamingFiles(prev => {
+              const newMap = new Map(prev)
+              newMap.set(update.filepath!, update.content!)
+              return newMap
+            })
+          } else if (update.type === 'file_complete' && update.filepath && update.content !== undefined) {
+            setStreamingFiles(prev => {
+              const newMap = new Map(prev)
+              newMap.set(update.filepath!, update.content!)
+              return newMap
+            })
+            // Add to files list
+            setFiles(prev => {
+              const exists = prev.find(f => f.path === update.filepath)
+              if (!exists) {
+                return [...prev, {
+                  path: update.filepath!,
+                  content: update.content!,
+                  type: update.filepath!.includes('src/') || update.filepath!.endsWith('.js') || update.filepath!.endsWith('.ts') || update.filepath!.endsWith('.py') ? 'source' : 'document'
+                }]
+              }
+              return prev.map(f => 
+                f.path === update.filepath 
+                  ? { ...f, content: update.content! }
+                  : f
+              )
+            })
+          }
+          
+          // Handle stream chunks for chat display
+          if (update.type === 'stream_chunk' && update.role && update.accumulated) {
+            // Update task message with accumulated content
+            setCurrentTask(prev => {
+              if (!prev) return null
+              return {
+                ...prev,
+                message: update.accumulated || prev.message,
+                role: update.role || prev.role,
+                action: update.action || prev.action
+              }
+            })
+          }
+          
           if (update.type === 'complete') {
             setIsGenerating(false)
+            setStreamingFiles(new Map()) // Clear streaming files
             fetchFiles()
           } else if (update.type === 'error') {
             setIsGenerating(false)
+            setStreamingFiles(new Map())
           }
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error)
@@ -143,6 +208,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         currentTask,
         files,
         isGenerating,
+        streamingFiles,
         startGeneration,
         fetchFiles,
         downloadProject,
