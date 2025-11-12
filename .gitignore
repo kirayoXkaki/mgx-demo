@@ -9,9 +9,20 @@ workspace/backend.log
 node_modules/
 dist/
 build/
+out/
+bin/
+obj/
+*.o
+*.exe
 *.log
+logs/
 .env
 .env.local
+.env.production
+.env.development
+env/
+venv/
+ENV/
 __pycache__/
 *.pyc
 *.pyo
@@ -21,16 +32,53 @@ __pycache__/
 *.egg
 *.egg-info/
 .idea/
+*.iml
 .vscode/
+.vscode/extensions.json
+.temp/
+*.tmp
+coverage/
+CMakeFiles/
+CMakeCache.txt
+yarn-error.log
+npm-debug.log
+*~
+*.bak
 *.swp
 *.swo
-*~
 Thumbs.db
-.DS_Store
+ehthumbs.db
+Desktop.ini
+*.local
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.sass-cache/
+.vite_opt_cache/
+test-results/
+*.coverage
+*.lcov
+*.user
+*.code-workspace
+pnpm-lock.yaml
+
+# Database files
 *.db
-venv/
-ENV/
-env/
+*.sqlite
+*.sqlite3
+
+# Log files
+api.log
+
+# Generated workspace
+workspace/workspace/
+
+# Monitor scripts output
+monitor_output.txt
+
+# Project specific
 workspace/mgx_backend/venv/
 workspace/mgx_backend/*.db
 workspace/mgx_backend/__pycache__/
@@ -39,4 +87,3 @@ workspace/mgx_backend/*.log
 workspace/mgx_frontend/node_modules/
 workspace/mgx_frontend/dist/
 workspace/mgx_frontend/build/
-
