@@ -20,13 +20,16 @@ class UserModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
-    api_key_hash = Column(String(255))  # Hashed API key
+    password_hash = Column(String(255), nullable=True)  # Hashed password (nullable for migration)
+    avatar_url = Column(String(500), default="")  # Avatar image URL
+    api_key_hash = Column(String(255))  # Hashed API key (optional)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     projects = relationship("ProjectModel", back_populates="user")
     sessions = relationship("SessionModel", back_populates="user")
+    conversations = relationship("ConversationHistoryModel", back_populates="user")
 
 
 class ProjectModel(Base):
@@ -88,18 +91,81 @@ class CostRecordModel(Base):
     project = relationship("ProjectModel", back_populates="costs")
 
 
+class ConversationHistoryModel(Base):
+    """Conversation history table."""
+    __tablename__ = "conversation_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)  # Optional, can be general chat
+    title = Column(String(200), default="New Conversation")  # Conversation title
+    messages = Column(JSON, nullable=False)  # Store messages as JSON array
+    extra_data = Column(JSON, nullable=True)  # Store task_id and other metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("UserModel", back_populates="conversations")
+    project = relationship("ProjectModel")
+
+
 # Pydantic Schemas for API
 class UserCreate(BaseModel):
     username: str
     email: str
+    password: str
     api_key: Optional[str] = None
+
+
+class UserRegister(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class UserUpdate(BaseModel):
+    avatar_url: Optional[str] = None
+    email: Optional[str] = None
 
 
 class UserResponse(BaseModel):
     id: int
     username: str
     email: str
+    avatar_url: Optional[str]
     created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class ConversationCreate(BaseModel):
+    user_id: int
+    project_id: Optional[int] = None
+    title: Optional[str] = "New Conversation"
+    messages: list = []
+    extra_data: Optional[dict] = None
+
+
+class ConversationUpdate(BaseModel):
+    title: Optional[str] = None
+    messages: Optional[list] = None
+
+
+class ConversationResponse(BaseModel):
+    id: int
+    user_id: int
+    project_id: Optional[int]
+    title: str
+    messages: list
+    extra_data: Optional[dict] = None
+    created_at: datetime
+    updated_at: datetime
     
     class Config:
         from_attributes = True
@@ -205,13 +271,14 @@ class DatabaseManager:
         return self.SessionLocal()
     
     # User operations
-    def create_user(self, user: UserCreate) -> UserModel:
+    def create_user(self, user: UserCreate, password_hash: str) -> UserModel:
         """Create a new user."""
         db = self.get_session()
         try:
             db_user = UserModel(
                 username=user.username,
                 email=user.email,
+                password_hash=password_hash if password_hash else None,
                 api_key_hash=user.api_key  # Should be hashed in production
             )
             db.add(db_user)
@@ -338,6 +405,108 @@ class DatabaseManager:
                 CostRecordModel.project_id == project_id
             ).with_entities(CostRecordModel.total_cost).all()
             return sum(r[0] for r in result)
+        finally:
+            db.close()
+    
+    def get_user_by_email(self, email: str) -> Optional[UserModel]:
+        """Get user by email."""
+        db = self.get_session()
+        try:
+            return db.query(UserModel).filter(UserModel.email == email).first()
+        finally:
+            db.close()
+    
+    def update_user(self, user_id: int, user_update: UserUpdate) -> Optional[UserModel]:
+        """Update user information."""
+        db = self.get_session()
+        try:
+            user = db.query(UserModel).filter(UserModel.id == user_id).first()
+            if user:
+                if user_update.avatar_url is not None:
+                    user.avatar_url = user_update.avatar_url
+                if user_update.email is not None:
+                    user.email = user_update.email
+                user.updated_at = datetime.utcnow()
+                db.commit()
+                db.refresh(user)
+            return user
+        finally:
+            db.close()
+    
+    # Conversation history operations
+    def create_conversation(self, conversation: ConversationCreate) -> ConversationHistoryModel:
+        """Create a new conversation."""
+        db = self.get_session()
+        try:
+            db_conv = ConversationHistoryModel(
+                user_id=conversation.user_id,
+                project_id=conversation.project_id,
+                title=conversation.title,
+                messages=conversation.messages,
+                extra_data=conversation.extra_data
+            )
+            db.add(db_conv)
+            db.commit()
+            db.refresh(db_conv)
+            return db_conv
+        finally:
+            db.close()
+    
+    def get_conversation(self, conversation_id: int) -> Optional[ConversationHistoryModel]:
+        """Get conversation by ID."""
+        db = self.get_session()
+        try:
+            return db.query(ConversationHistoryModel).filter(
+                ConversationHistoryModel.id == conversation_id
+            ).first()
+        finally:
+            db.close()
+    
+    def update_conversation(self, conversation_id: int, conversation_update: ConversationUpdate) -> Optional[ConversationHistoryModel]:
+        """Update conversation."""
+        db = self.get_session()
+        try:
+            conv = db.query(ConversationHistoryModel).filter(
+                ConversationHistoryModel.id == conversation_id
+            ).first()
+            if conv:
+                if conversation_update.title is not None:
+                    conv.title = conversation_update.title
+                if conversation_update.messages is not None:
+                    conv.messages = conversation_update.messages
+                conv.updated_at = datetime.utcnow()
+                db.commit()
+                db.refresh(conv)
+            return conv
+        finally:
+            db.close()
+    
+    def list_conversations(self, user_id: int, project_id: Optional[int] = None, skip: int = 0, limit: int = 100) -> List[ConversationHistoryModel]:
+        """List conversations for a user."""
+        db = self.get_session()
+        try:
+            query = db.query(ConversationHistoryModel).filter(
+                ConversationHistoryModel.user_id == user_id
+            )
+            if project_id is not None:
+                query = query.filter(ConversationHistoryModel.project_id == project_id)
+            return query.order_by(ConversationHistoryModel.updated_at.desc()).offset(skip).limit(limit).all()
+        finally:
+            db.close()
+    
+    def delete_conversation(self, conversation_id: int, user_id: int) -> bool:
+        """Delete a conversation (only if owned by user)."""
+        db = self.get_session()
+        try:
+            conv = db.query(ConversationHistoryModel).filter(
+                ConversationHistoryModel.id == conversation_id,
+                ConversationHistoryModel.user_id == user_id
+            ).first()
+            if conv:
+                db.delete(conv)
+                db.commit()
+                return True
+            return False
         finally:
             db.close()
 

@@ -9,7 +9,9 @@ interface TaskContextType {
   chatMessages: Array<{id: string, role: string, content: string, timestamp: Date}> // Direct chat messages queue
   startGeneration: (idea: string, investment: number) => Promise<void>
   fetchFiles: () => Promise<void>
+  loadProjectFiles: (taskId: string) => Promise<void>
   downloadProject: () => Promise<void>
+  clearFiles: () => void
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined)
@@ -260,11 +262,62 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     }
   }, [currentTask?.task_id])
 
+  const loadProjectFiles = useCallback(async (taskId: string) => {
+    try {
+      console.log('📁 [Task] Loading project files for task:', taskId)
+      const response = await fetch(`/api/files/${taskId}`)
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log('📁 [Task] Project files not found for task:', taskId)
+          return
+        }
+        throw new Error(`Failed to load project files: ${response.status}`)
+      }
+      const data = await response.json()
+      setFiles(data.files || [])
+      console.log('✅ [Task] Loaded project files:', data.files?.length || 0, 'files')
+      
+      // Also set the task as completed if we're loading from history
+      setCurrentTask(prev => {
+        if (prev?.task_id === taskId) {
+          return prev
+        }
+        return {
+          task_id: taskId,
+          status: 'completed',
+          progress: 100,
+          current_stage: 'Loaded from history',
+          cost: 0,
+          idea: '',
+          investment: 0,
+          n_round: 5,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+      })
+    } catch (error) {
+      console.error('❌ [Task] Failed to load project files:', error)
+    }
+  }, [])
+
   const downloadProject = useCallback(async () => {
     if (!currentTask?.task_id) return
     
     window.open(`/api/download/${currentTask.task_id}`, '_blank')
   }, [currentTask?.task_id])
+
+  const clearFiles = useCallback(() => {
+    setFiles([])
+    setStreamingFiles(new Map())
+    setCurrentTask(null)
+    setChatMessages([])
+    // Close WebSocket if open
+    if (ws) {
+      ws.close()
+      setWs(null)
+    }
+    console.log('🧹 [Task] Cleared all files and task state')
+  }, [ws])
 
   useEffect(() => {
     return () => {
@@ -284,7 +337,9 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         chatMessages,
         startGeneration,
         fetchFiles,
+        loadProjectFiles,
         downloadProject,
+        clearFiles,
       }}
     >
       {children}

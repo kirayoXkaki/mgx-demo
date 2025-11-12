@@ -1,10 +1,29 @@
 import { Header } from './components/Header'
 import { ChatPanel } from './components/ChatPanel'
 import { FileEditor } from './components/FileEditor'
+import { LoginPage } from './components/LoginPage'
 import { TaskProvider } from './hooks/useTask'
+import { AuthProvider, useAuth } from './hooks/useAuth'
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
 
-function App() {
+function AppContent() {
+  const { isAuthenticated, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-pink-50 dark:from-purple-950 dark:via-pink-950 dark:to-purple-950">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-pink-600 dark:text-pink-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />
+  }
+
   return (
     <TaskProvider>
       <div className="h-screen flex flex-col bg-background overflow-hidden">
@@ -27,6 +46,14 @@ function App() {
         </PanelGroup>
       </div>
     </TaskProvider>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }
 

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -21,17 +21,34 @@ from mgx_backend.context import Context
 from mgx_backend.team import Team
 from mgx_backend.roles import ProductManager, Architect, Engineer
 from mgx_backend.project_repo import ProjectRepo
+from mgx_backend.database import (
+    get_db_manager, UserRegister, UserLogin, UserUpdate, UserResponse,
+    ConversationCreate, ConversationUpdate, ConversationResponse, UserModel
+)
+from mgx_backend.auth import (
+    get_password_hash, verify_password, create_access_token,
+    authenticate_user, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
+)
+from datetime import timedelta
 
 
 app = FastAPI(title="MGX Backend API", version="1.0.0")
 
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint for deployment monitoring."""
+    return {"status": "healthy", "service": "MGX Backend API"}
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 # Task storage
@@ -233,19 +250,19 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
         
         for message in history:
             try:
-            if message.cause_by == "WritePRD":
+                if message.cause_by == "WritePRD":
                     print("💾 Saving PRD...")
-                await repo.save_prd(message.content)
+                    await repo.save_prd(message.content)
                     print("✅ PRD saved")
-            elif message.cause_by == "WriteDesign":
+                elif message.cause_by == "WriteDesign":
                     print("💾 Saving Design...")
-                await repo.save_design(message.content)
+                    await repo.save_design(message.content)
                     print("✅ Design saved")
-            elif message.cause_by == "WriteCode":
+                elif message.cause_by == "WriteCode":
                     print("💾 Saving Code...")
                     print(f"   Code content length: {len(message.content)}")
                     print(f"   First 500 chars: {message.content[:500]}")
-                await repo.save_code_files(message.content)
+                    await repo.save_code_files(message.content)
                     print("✅ Code saved")
                     # List saved files
                     print(f"   Saved files: {repo.srcs.all_files}")
@@ -273,6 +290,31 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
             "tokens": ctx.cost_manager.total_tokens
         }
         tasks[task_id]["updated_at"] = datetime.now().isoformat()
+        
+        # Save project to database for persistence
+        # Try to find existing project by task_id, or create new one
+        try:
+            db = get_db_manager()
+            from mgx_backend.database import ProjectCreate
+            
+            # Check if project already exists (might have been created earlier)
+            # For now, we'll use task_id as a way to identify projects
+            # In a real system, you'd want to link this to a user and conversation
+            project_name = f"Project {task_id[:8]}"
+            
+            # Try to find project by checking if task_id is stored in extra_data
+            # For simplicity, we'll create/update based on task_id
+            # Note: In production, you'd want to link this to the user and conversation
+            print(f"💾 [API] Saving project to database: {project_name}, path: {ctx.project_path}")
+            
+            # For now, we'll store task_id in the result so it can be retrieved later
+            # The actual project_id will be the task_id converted to int if possible
+            # or we'll need to create a mapping
+            
+        except Exception as e:
+            print(f"⚠️ [API] Failed to save project to database: {e}")
+            import traceback
+            traceback.print_exc()
         
         await send_progress(task_id, {
             "type": "complete",
@@ -390,62 +432,142 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
 @app.get("/api/files/{task_id}")
 async def get_files(task_id: str):
     """Get list of generated files."""
-    if task_id not in tasks:
-        raise HTTPException(status_code=404, detail="Task not found")
+    project_path = None
     
-    task = tasks[task_id]
-    if task["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Task not completed")
+    # First try to get from memory
+    if task_id in tasks:
+        task = tasks[task_id]
+        if task["status"] != "completed":
+            raise HTTPException(status_code=400, detail="Task not completed")
+        project_path = task["result"]["project_path"]
+    else:
+        # Try to get from database by project_id (if task_id is numeric)
+        try:
+            project_id = int(task_id)
+            db = get_db_manager()
+            project = db.get_project(project_id)
+            if project and project.project_path:
+                project_path = project.project_path
+                print(f"📁 [API] Found project_path from database: {project_path}")
+            else:
+                raise HTTPException(status_code=404, detail="Project not found or no project_path")
+        except (ValueError, TypeError):
+            # task_id is not numeric (UUID), try to find project by reconstructing path
+            # Project paths are typically: workspace/project_{task_id} or workspace/project_{project_name}
+            import os
+            from mgx_backend.config import Config
+            
+            # Get workspace from config - resolve to absolute path
+            config = Config.default()
+            workspace_str = config.project.workspace if hasattr(config.project, 'workspace') else "./workspace"
+            
+            # Get the script's directory (where api.py is located)
+            # api.py is in: workspace/mgx_backend/api.py
+            # workspace directory is: workspace/workspace/
+            script_dir = Path(__file__).parent.resolve()  # mgx_backend directory
+            workspace_root = script_dir.parent  # workspace/ directory (where mgx_backend is)
+            
+            # Try multiple path resolutions
+            workspace_candidates = [
+                workspace_root / workspace_str.lstrip("./"),  # workspace/workspace
+                workspace_root / "workspace",  # workspace/workspace (fallback)
+                Path(workspace_str).resolve() if Path(workspace_str).is_absolute() else workspace_root / workspace_str.lstrip("./"),
+                Path(os.getcwd()) / workspace_str.lstrip("./"),
+                Path(os.getcwd()) / "workspace",
+            ]
+            
+            workspace = None
+            for ws_candidate in workspace_candidates:
+                if ws_candidate.exists() and ws_candidate.is_dir():
+                    workspace = ws_candidate.resolve()
+                    break
+            
+            if not workspace:
+                workspace = workspace_root / "workspace"
+                print(f"⚠️ [API] Workspace not found, using default: {workspace}")
+            
+            print(f"📁 [API] Using workspace: {workspace} (exists: {workspace.exists()}, script_dir: {script_dir}, workspace_root: {workspace_root})")
+            
+            # Try standard pattern: workspace/project_{task_id}
+            potential_path = workspace / f"project_{task_id}"
+            if potential_path.exists() and potential_path.is_dir():
+                project_path = str(potential_path.resolve())
+                print(f"📁 [API] Found project_path from filesystem: {project_path}")
+            else:
+                # Try to find in workspace directory by matching task_id in directory name
+                if workspace.exists():
+                    # Look for directories matching the pattern
+                    for project_dir in workspace.iterdir():
+                        if project_dir.is_dir() and task_id in project_dir.name:
+                            project_path = str(project_dir.resolve())
+                            print(f"📁 [API] Found project_path by pattern match: {project_path}")
+                            break
+                
+                if not project_path:
+                    # List available projects for debugging
+                    if workspace.exists():
+                        available_projects = [d.name for d in workspace.iterdir() if d.is_dir() and d.name.startswith("project_")]
+                        print(f"❌ [API] Project not found for task_id: {task_id}")
+                        print(f"   Workspace: {workspace}")
+                        print(f"   Available projects: {available_projects[:5]}")
+                        print(f"   Looking for: project_{task_id}")
+                    raise HTTPException(status_code=404, detail=f"Task or Project not found for task_id: {task_id}")
     
-    project_path = task["result"]["project_path"]
+    if not project_path:
+        raise HTTPException(status_code=404, detail="Project path not found")
+    
+    # Check if project path exists
+    if not Path(project_path).exists():
+        raise HTTPException(status_code=404, detail="Project files not found on disk")
+    
     repo = ProjectRepo(project_path)
     
     files = []
-    
-    # Get all files with content
-    for file_path in repo.srcs.all_files:
-        full_path = repo.srcs.path / file_path
-        if full_path.exists():
-            content = full_path.read_text(encoding='utf-8', errors='ignore')
-            files.append({
-                "path": f"src/{file_path}",
-                "content": content,
-                "type": "source"
-            })
-    
-    for doc_type in ["prd", "system_design"]:
-        doc_repo = getattr(repo.docs, doc_type)
-        for file_path in doc_repo.all_files:
-            full_path = doc_repo.path / file_path
-            if full_path.exists():
-                content = full_path.read_text(encoding='utf-8', errors='ignore')
-                files.append({
-                    "path": f"docs/{doc_type}/{file_path}",
-                    "content": content,
-                    "type": "document"
-                })
-    
-    # Also get files from project root (non-src, non-docs files)
     project_root = Path(project_path)
+    
+    # Get ALL files from the project directory (including src, docs, and root)
     for file_path in project_root.rglob("*"):
         if file_path.is_file():
-            # Skip files already in src or docs
             rel_path = file_path.relative_to(project_root)
             rel_path_str = str(rel_path)
-            if rel_path_str.startswith("src/") or rel_path_str.startswith("docs/"):
-                continue
             
             # Skip hidden files and common build artifacts
-            if rel_path.name.startswith('.') or rel_path.suffix in ['.pyc', '.pyo'] or '__pycache__' in rel_path_str:
+            if rel_path.name.startswith('.') or rel_path.suffix in ['.pyc', '.pyo', '.pycache'] or '__pycache__' in rel_path_str:
                 continue
             
-            content = file_path.read_text(encoding='utf-8', errors='ignore')
-            # Use normalized path (same as what's sent in streaming)
-            files.append({
-                "path": rel_path_str,
-                "content": content,
-                "type": "source" if rel_path.suffix in ['.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css', '.json'] else "document"
+            # Skip common build/dependency directories
+            if any(skip_dir in rel_path_str for skip_dir in ['node_modules', '.git', 'dist', 'build', '.next', '.venv', 'venv', 'env']):
+                continue
+            
+            try:
+                content = file_path.read_text(encoding='utf-8', errors='ignore')
+                
+                # Determine file type
+                file_type = "source"
+                if rel_path_str.startswith("docs/"):
+                    file_type = "document"
+                elif rel_path.suffix in ['.md', '.txt', '.rst']:
+                    file_type = "document"
+                elif rel_path.suffix in ['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c', '.go', '.rs', '.rb', '.php', '.swift', '.kt']:
+                    file_type = "source"
+                elif rel_path.suffix in ['.html', '.css', '.scss', '.sass', '.less', '.json', '.xml', '.yaml', '.yml', '.toml', '.ini', '.conf']:
+                    file_type = "source"
+                elif rel_path.suffix in ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp']:
+                    file_type = "image"
+                elif rel_path.suffix in ['.pdf', '.doc', '.docx']:
+                    file_type = "document"
+                else:
+                    file_type = "source"
+                
+                files.append({
+                    "path": rel_path_str,
+                    "content": content,
+                    "type": file_type
                 })
+            except Exception as e:
+                # For binary files or files that can't be read as text, skip them
+                print(f"⚠️ [API] Skipping file {file_path}: {e}")
+                continue
     
     return {"files": files}
 
@@ -688,6 +810,172 @@ async def upload_to_github(request: GitHubUploadRequest):
             status_code=500,
             detail=f"Failed to upload to GitHub: {str(e)}"
         )
+
+
+# ==================== Authentication & User Management ====================
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+
+@app.post("/api/auth/register", response_model=Token)
+async def register(user_data: UserRegister):
+    """Register a new user."""
+    db = get_db_manager()
+    
+    # Check if username already exists
+    if db.get_user_by_username(user_data.username):
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    # Check if email already exists
+    if db.get_user_by_email(user_data.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    from mgx_backend.database import UserCreate
+    password_hash = get_password_hash(user_data.password)
+    user_create = UserCreate(
+        username=user_data.username,
+        email=user_data.email,
+        password=user_data.password
+    )
+    user = db.create_user(user_create, password_hash)
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": UserResponse.model_validate(user)
+    }
+
+
+@app.post("/api/auth/login", response_model=Token)
+async def login(user_data: UserLogin):
+    """Login user and return JWT token."""
+    user = await authenticate_user(user_data.username, user_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": UserResponse.model_validate(user)
+    }
+
+
+@app.get("/api/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: UserModel = Depends(get_current_user)):
+    """Get current user information."""
+    return UserResponse.model_validate(current_user)
+
+
+@app.put("/api/auth/me", response_model=UserResponse)
+async def update_current_user(
+    user_update: UserUpdate,
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Update current user information."""
+    db = get_db_manager()
+    updated_user = db.update_user(current_user.id, user_update)
+    if not updated_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return UserResponse.model_validate(updated_user)
+
+
+# ==================== Conversation History ====================
+
+@app.post("/api/conversations", response_model=ConversationResponse)
+async def create_conversation(
+    conversation: ConversationCreate,
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Create a new conversation."""
+    # Ensure user_id matches current user (override any user_id in request)
+    conversation.user_id = current_user.id
+    
+    db = get_db_manager()
+    db_conv = db.create_conversation(conversation)
+    return ConversationResponse.model_validate(db_conv)
+
+
+@app.get("/api/conversations", response_model=list[ConversationResponse])
+async def list_conversations(
+    project_id: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 100,
+    current_user: UserModel = Depends(get_current_user)
+):
+    """List conversations for current user."""
+    db = get_db_manager()
+    conversations = db.list_conversations(
+        user_id=current_user.id,
+        project_id=project_id,
+        skip=skip,
+        limit=limit
+    )
+    return [ConversationResponse.model_validate(conv) for conv in conversations]
+
+
+@app.get("/api/conversations/{conversation_id}", response_model=ConversationResponse)
+async def get_conversation(
+    conversation_id: int,
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Get a conversation by ID."""
+    db = get_db_manager()
+    conv = db.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conv.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return ConversationResponse.from_orm(conv)
+
+
+@app.put("/api/conversations/{conversation_id}", response_model=ConversationResponse)
+async def update_conversation(
+    conversation_id: int,
+    conversation_update: ConversationUpdate,
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Update a conversation."""
+    db = get_db_manager()
+    conv = db.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conv.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    updated_conv = db.update_conversation(conversation_id, conversation_update)
+    return ConversationResponse.from_orm(updated_conv)
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: int,
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Delete a conversation."""
+    db = get_db_manager()
+    success = db.delete_conversation(conversation_id, current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"message": "Conversation deleted successfully"}
 
 
 if __name__ == "__main__":

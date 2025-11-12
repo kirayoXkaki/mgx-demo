@@ -1,13 +1,19 @@
 import { useState } from 'react'
-import { Rocket, DollarSign, Download, Github, Loader2, User, Mail, ExternalLink, Linkedin } from 'lucide-react'
+import { Rocket, DollarSign, Download, Github, Loader2, User, Mail, ExternalLink, Linkedin, Settings, LogOut, UserCircle, History } from 'lucide-react'
 import { useTask } from '../hooks/useTask'
+import { useAuth } from '../hooks/useAuth'
 import { formatCost } from '../lib/utils'
 import { Button } from './ui/button'
+import { ConversationHistory } from './ConversationHistory'
 
 export function Header() {
   const { currentTask, downloadProject } = useTask()
+  const { user, logout, isAuthenticated } = useAuth()
   const [showGitHubDialog, setShowGitHubDialog] = useState(false)
   const [showAboutDialog, setShowAboutDialog] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [githubToken, setGithubToken] = useState('')
   const [repoName, setRepoName] = useState('')
   const [repoDescription, setRepoDescription] = useState('')
@@ -126,6 +132,63 @@ export function Header() {
             </Button>
           </>
         )}
+        
+        {/* History Button */}
+        {isAuthenticated && user && (
+          <Button
+            onClick={() => setShowHistory(true)}
+            size="sm"
+            variant="ghost"
+            className="gap-2 text-pink-700 dark:text-pink-300 hover:bg-pink-100 dark:hover:bg-pink-900 rounded-xl transition-all transform hover:scale-105"
+          >
+            <History className="w-4 h-4" />
+            历史记录
+          </Button>
+        )}
+        
+        {/* User Menu */}
+        {isAuthenticated && user ? (
+          <div className="relative">
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-pink-200 to-purple-200 dark:from-pink-800 dark:to-purple-800 border border-pink-300 dark:border-pink-600 hover:from-pink-300 hover:to-purple-300 dark:hover:from-pink-700 dark:hover:to-purple-700 transition-all pokemon-shadow"
+            >
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt={user.username} className="w-6 h-6 rounded-full" />
+              ) : (
+                <UserCircle className="w-5 h-5 text-pink-700 dark:text-pink-300" />
+              )}
+              <span className="text-sm font-medium text-pink-900 dark:text-pink-100">{user.username}</span>
+            </button>
+            
+            {showUserMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-pink-200 dark:border-pink-800 pokemon-shadow z-50">
+                <div className="p-2">
+                  <button
+                    onClick={() => {
+                      setShowSettings(true)
+                      setShowUserMenu(false)
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-pink-50 dark:hover:bg-pink-900/30 text-pink-700 dark:text-pink-300 transition-colors"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Settings
+                  </button>
+                  <button
+                    onClick={() => {
+                      logout()
+                      setShowUserMenu(false)
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
         
         {/* About Developer Button */}
         <Button 
@@ -418,6 +481,121 @@ export function Header() {
           </div>
         </div>
       )}
+      
+      {/* User Settings Dialog */}
+      {showSettings && (
+        <UserSettingsDialog onClose={() => setShowSettings(false)} />
+      )}
+      
+      {/* Conversation History Dialog */}
+      {showHistory && (
+        <ConversationHistory onClose={() => setShowHistory(false)} />
+      )}
     </header>
+  )
+}
+
+function UserSettingsDialog({ onClose }: { onClose: () => void }) {
+  const { user, updateUser } = useAuth()
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '')
+  const [email, setEmail] = useState(user?.email || '')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const handleSave = async () => {
+    setLoading(true)
+    setError('')
+    setSuccess('')
+    
+    try {
+      await updateUser({
+        avatar_url: avatarUrl || undefined,
+        email: email || undefined
+      })
+      setSuccess('Profile updated successfully!')
+      setTimeout(() => {
+        onClose()
+      }, 1000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to update profile')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      <div 
+        className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md pokemon-shadow border-2 border-pink-300 dark:border-pink-600"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-xl font-bold mb-4 bg-gradient-to-r from-pink-600 to-purple-600 dark:from-pink-400 dark:to-purple-400 bg-clip-text text-transparent">
+          User Settings
+        </h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-pink-700 dark:text-pink-300 mb-1">
+              Avatar URL
+            </label>
+            <input
+              type="url"
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder="https://example.com/avatar.png"
+              className="w-full px-3 py-2 border border-pink-300 dark:border-pink-600 rounded-lg bg-white/80 dark:bg-purple-950/80 text-pink-900 dark:text-pink-100 focus:border-pink-400 dark:focus:border-pink-500 focus:ring-pink-300 dark:focus:ring-pink-700"
+            />
+            {avatarUrl && (
+              <div className="mt-2">
+                <img src={avatarUrl} alt="Avatar preview" className="w-16 h-16 rounded-full border-2 border-pink-300 dark:border-pink-600" onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                }} />
+              </div>
+            )}
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-pink-700 dark:text-pink-300 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-pink-300 dark:border-pink-600 rounded-lg bg-white/80 dark:bg-purple-950/80 text-pink-900 dark:text-pink-100 focus:border-pink-400 dark:focus:border-pink-500 focus:ring-pink-300 dark:focus:ring-pink-700"
+            />
+          </div>
+          
+          {error && (
+            <div className="p-3 bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-600 rounded-lg text-red-700 dark:text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+          
+          {success && (
+            <div className="p-3 bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-600 rounded-lg text-green-700 dark:text-green-300 text-sm">
+              {success}
+            </div>
+          )}
+          
+          <div className="flex gap-3 pt-2">
+            <Button
+              onClick={handleSave}
+              disabled={loading}
+              className="flex-1 pokemon-gradient hover:pokemon-glow text-white font-semibold rounded-xl"
+            >
+              {loading ? 'Saving...' : 'Save'}
+            </Button>
+            <Button
+              onClick={onClose}
+              className="px-4 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-xl"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

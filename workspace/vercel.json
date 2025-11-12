@@ -1,0 +1,33 @@
+{
+  "buildCommand": "cd mgx_frontend && npm install && npm run build",
+  "outputDirectory": "mgx_frontend/dist",
+  "devCommand": "cd mgx_frontend && npm run dev",
+  "installCommand": "cd mgx_frontend && npm install",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ]
+}
+

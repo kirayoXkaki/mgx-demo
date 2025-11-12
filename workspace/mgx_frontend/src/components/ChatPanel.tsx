@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
-import { Send, Loader2, Brain, FileText, Code, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Send, Loader2, Brain, FileText, Code, ChevronDown, MessageSquarePlus } from 'lucide-react'
 import { useTask } from '../hooks/useTask'
+import { useAuth } from '../hooks/useAuth'
 import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
@@ -14,16 +15,21 @@ interface ChatMessage {
   timestamp: Date
 }
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 export function ChatPanel() {
   const [idea, setIdea] = useState('')
   const [investment, setInvestment] = useState(5.0)
-  const { currentTask, isGenerating, startGeneration, chatMessages } = useTask()
+  const { currentTask, isGenerating, startGeneration, chatMessages, loadProjectFiles, clearFiles } = useTask()
+  const { user, token } = useAuth()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const [userScrolled, setUserScrolled] = useState(false)
   const lastMessageCountRef = useRef(0)
+  const [savingHistory, setSavingHistory] = useState(false)
+  const [currentConversationId, setCurrentConversationId] = useState<number | null>(null)
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -338,12 +344,199 @@ export function ChatPanel() {
       }
   }, [currentTask])
 
+  // Auto-save conversation history (debounced)
+  const saveConversationHistory = async (isUpdate = false) => {
+    if (!user || !token || messages.length === 0) {
+      console.log('⏭️ [Save] Skipping save: user=', !!user, 'token=', !!token, 'messages.length=', messages.length)
+      return
+    }
+    
+    console.log('💾 [Save] Starting save...', {
+      userId: user.id,
+      messagesCount: messages.length,
+      isUpdate,
+      conversationId: currentConversationId
+    })
+    
+    setSavingHistory(true)
+    try {
+      const conversationData = {
+        user_id: user.id,
+        project_id: null, // We'll use task_id from extra_data instead
+        title: idea || `Conversation ${new Date().toLocaleDateString()}`,
+        messages: messages.map(msg => ({
+          role: msg.role,
+          roleName: msg.roleName,
+          content: msg.content,
+          type: msg.type,
+          timestamp: msg.timestamp.toISOString()
+        })),
+        extra_data: currentTask?.task_id ? { task_id: currentTask.task_id } : null
+      }
+      
+      console.log('💾 [Save] Sending request...', {
+        url: isUpdate && currentConversationId 
+          ? `${API_URL}/api/conversations/${currentConversationId}`
+          : `${API_URL}/api/conversations`,
+        method: isUpdate ? 'PUT' : 'POST',
+        messagesCount: conversationData.messages.length
+      })
+      
+      let response
+      if (isUpdate && currentConversationId) {
+        // Update existing conversation
+        response = await fetch(`${API_URL}/api/conversations/${currentConversationId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            title: conversationData.title,
+            messages: conversationData.messages
+          })
+        })
+      } else {
+        // Create new conversation
+        response = await fetch(`${API_URL}/api/conversations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(conversationData)
+        })
+      }
+      
+      console.log('💾 [Save] Response status:', response.status, response.statusText)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('💾 [Save] Error response:', errorText)
+        throw new Error(`Failed to save conversation: ${response.status} ${errorText}`)
+      }
+      
+      const data = await response.json()
+      console.log('💾 [Save] Success!', {
+        conversationId: data.id,
+        title: data.title,
+        messagesCount: data.messages?.length || 0
+      })
+      
+      if (!currentConversationId && data.id) {
+        setCurrentConversationId(data.id)
+        console.log('💾 [Save] Set conversation ID:', data.id)
+      }
+      
+      console.log('✅ Conversation history saved', isUpdate ? '(updated)' : '(created)')
+    } catch (error) {
+      console.error('❌ Failed to save conversation history:', error)
+      if (error instanceof Error) {
+        console.error('Error details:', error.message)
+      }
+    } finally {
+      setSavingHistory(false)
+    }
+  }
+  
+  // Auto-save when messages change (debounced)
+  useEffect(() => {
+    if (!user || !token || messages.length === 0) {
+      console.log('⏭️ [Auto-save] Skipping: user=', !!user, 'token=', !!token, 'messages.length=', messages.length)
+      return
+    }
+    
+    console.log('💾 [Auto-save] Scheduling save in 2 seconds...', {
+      messagesCount: messages.length,
+      conversationId: currentConversationId,
+      isUpdate: !!currentConversationId
+    })
+    
+    // Debounce: save 2 seconds after last message change
+    const timer = setTimeout(() => {
+      console.log('💾 [Auto-save] Executing save now...')
+      saveConversationHistory(!!currentConversationId)
+    }, 2000)
+    
+    return () => {
+      console.log('💾 [Auto-save] Timer cleared')
+      clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, user, token, currentConversationId])
+  
+  // Reset conversation ID when starting new task
+  useEffect(() => {
+    if (currentTask?.status === 'pending' && currentTask?.current_stage === 'Initializing') {
+      setCurrentConversationId(null)
+    }
+  }, [currentTask?.status, currentTask?.current_stage])
+  
+  // Load conversation from history - use useCallback to maintain stable reference
+  const loadConversation = useCallback((historyMessages: Array<{
+    role: string
+    roleName?: string
+    content: string
+    type?: string
+    timestamp: string
+  }>, conversationId: number, conversationTitle: string, projectId?: number | null, extraData?: any) => {
+    // Convert history messages to ChatMessage format
+    const loadedMessages: ChatMessage[] = historyMessages.map((msg, idx) => ({
+      id: `loaded-${conversationId}-${idx}`,
+      role: msg.role as 'user' | 'assistant',
+      roleName: msg.roleName,
+      content: msg.content,
+      type: msg.type as 'thinking' | 'working' | 'message' | 'complete' | undefined,
+      timestamp: new Date(msg.timestamp)
+    }))
+    
+    setMessages(loadedMessages)
+    setCurrentConversationId(conversationId)
+    setIdea(conversationTitle)
+    
+    // Load project files - try task_id from extra_data first, then project_id
+    const taskId = extraData?.task_id || (projectId ? String(projectId) : null)
+    if (taskId) {
+      console.log('📁 [Chat] Loading project files for task_id:', taskId)
+      loadProjectFiles(taskId)
+    } else {
+      console.log('⏭️ [Chat] No task_id or project_id found, skipping file load')
+    }
+    
+    // Scroll to bottom
+    setTimeout(() => scrollToBottom(), 100)
+  }, [loadProjectFiles])
+  
+  // Expose loadConversation function via window for ConversationHistory component
+  useEffect(() => {
+    (window as any).loadConversationToChat = loadConversation
+    return () => {
+      delete (window as any).loadConversationToChat
+    }
+  }, [loadConversation])
+
+  const handleNewChat = () => {
+    // Clear all chat state
+    setMessages([])
+    setCurrentConversationId(null)
+    setIdea('')
+    setUserScrolled(false)
+    setShowScrollToBottom(false)
+    lastMessageCountRef.current = 0
+    
+    // Clear all files and task state
+    clearFiles()
+    
+    console.log('💬 [Chat] New chat started - cleared all messages, state, and files')
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!idea.trim() || isGenerating) return
     
-    // Clear messages when starting a new generation
+    // Clear messages and conversation ID when starting a new generation
     setMessages([])
+    setCurrentConversationId(null)
     await startGeneration(idea, investment)
   }
 
@@ -358,7 +551,10 @@ export function ChatPanel() {
     if (roleName === 'Charlie' || roleName === 'Engineer') {
       return '/pokemon/umbreon.png' // Umbreon - creative and technical Engineer
     }
-    return null
+    // Default avatar for assistant messages without specific role - Kirby (星之卡比)
+    // Try local file first, fallback to online image
+    // You can add your own kirby.png to public/pokemon/ directory
+    return '/pokemon/kirby.png' // Kirby avatar - add your own image or it will show emoji fallback
   }
   
   // Get Pokemon avatar background color (matching Eevee evolution themes)
@@ -403,8 +599,27 @@ export function ChatPanel() {
 
   return (
     <div className="w-full h-full border-r border-pink-200 dark:border-pink-800 flex flex-col bg-gradient-to-b from-white/80 via-pink-50/80 to-purple-50/80 dark:from-purple-950/80 dark:via-pink-950/80 dark:to-purple-950/80 backdrop-blur-sm min-h-0">
-      <div className="flex-shrink-0 p-4 border-b border-pink-200 dark:border-pink-800 bg-gradient-to-r from-pink-100 to-purple-100 dark:from-pink-900 dark:to-purple-900">
-        <h2 className="font-semibold text-lg bg-gradient-to-r from-pink-600 to-purple-600 dark:from-pink-400 dark:to-purple-400 bg-clip-text text-transparent">💬 Chat</h2>
+      <div className="flex-shrink-0 p-4 border-b border-pink-200 dark:border-pink-800 bg-gradient-to-r from-pink-100 to-purple-100 dark:from-pink-900 dark:to-purple-900 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-lg bg-gradient-to-r from-pink-600 to-purple-600 dark:from-pink-400 dark:to-purple-400 bg-clip-text text-transparent">💬 Chat</h2>
+          {savingHistory && (
+            <div className="flex items-center gap-1 text-xs text-pink-600 dark:text-pink-400">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>保存中...</span>
+            </div>
+          )}
+        </div>
+        <Button
+          onClick={handleNewChat}
+          size="sm"
+          variant="ghost"
+          className="gap-2 text-pink-700 dark:text-pink-300 hover:bg-pink-200 dark:hover:bg-pink-800 rounded-xl transition-all transform hover:scale-105"
+          disabled={isGenerating}
+          title="开始新对话"
+        >
+          <MessageSquarePlus className="w-4 h-4" />
+          <span className="hidden sm:inline">New Chat</span>
+        </Button>
       </div>
       
       <div className="flex-1 min-h-0 overflow-hidden relative">
@@ -435,7 +650,7 @@ export function ChatPanel() {
                   </div>
                   
                   {/* Three agents display */}
-                  <div className="space-y-4">
+          <div className="space-y-4">
                     <div className="text-xs font-semibold text-pink-600 dark:text-pink-400 text-center mb-3">
                       Meet Your Team
                     </div>
@@ -573,25 +788,25 @@ export function ChatPanel() {
               <div key={msg.id} className={`rounded-xl p-4 border ${getRoleColor()} ${messageTypeStyle} transition-all hover:shadow-lg`}>
                 <div className="flex items-start gap-3 mb-2">
                   <div className={`flex-shrink-0 w-12 h-12 rounded-full ${pokemonAvatarBg} flex items-center justify-center border-2 shadow-md hover:scale-110 transition-transform overflow-hidden`}>
-                    {pokemonAvatarPath ? (
-                      <img 
-                        src={pokemonAvatarPath} 
-                        alt={roleDisplayName}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // Fallback to emoji if image fails to load
-                          const target = e.target as HTMLImageElement
-                          target.style.display = 'none'
-                          const parent = target.parentElement
-                          if (parent) {
-                            parent.innerHTML = msg.roleName === 'Alice' ? '⚡' : msg.roleName === 'Bob' ? '🧠' : msg.roleName === 'Charlie' ? '🔥' : '👤'
-                            parent.className += ' text-3xl'
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span className="text-3xl">👤</span>
-                    )}
+                    {/* pokemonAvatarPath is always set now (returns Kirby URL for default assistant) */}
+                    <img 
+                      src={pokemonAvatarPath} 
+                      alt={roleDisplayName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Fallback to emoji if image fails to load
+                        const target = e.target as HTMLImageElement
+                        target.style.display = 'none'
+                        const parent = target.parentElement
+                        if (parent) {
+                          parent.innerHTML = msg.roleName === 'Alice' ? '⚡' 
+                            : msg.roleName === 'Bob' ? '🧠' 
+                            : msg.roleName === 'Charlie' ? '🔥' 
+                            : '⭐' // Kirby emoji (星之卡比) for default assistant
+                          parent.className += ' text-3xl'
+                        }
+                      }}
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -609,8 +824,8 @@ export function ChatPanel() {
                       <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                         <span>✅</span>
                         <span>Completed</span>
-                      </p>
-                    )}
+                  </p>
+                )}
                   </div>
                 </div>
               </div>
@@ -625,10 +840,10 @@ export function ChatPanel() {
               <div className="text-xs text-pink-500 dark:text-pink-500 text-center">
                 Your team is preparing to work
               </div>
-            </div>
-          )}
+              </div>
+            )}
           <div ref={messagesEndRef} />
-        </div>
+          </div>
         </ScrollArea>
         
         {/* Scroll to bottom button */}
