@@ -2,7 +2,10 @@
 .lock
 .storage/
 debug.log
-workspace/
+workspace/workspace/
+workspace/*.log
+workspace/frontend.log
+workspace/backend.log
 node_modules/
 dist/
 build/
@@ -24,4 +27,16 @@ __pycache__/
 *~
 Thumbs.db
 .DS_Store
+*.db
+venv/
+ENV/
+env/
+workspace/mgx_backend/venv/
+workspace/mgx_backend/*.db
+workspace/mgx_backend/__pycache__/
+workspace/mgx_backend/**/__pycache__/
+workspace/mgx_backend/*.log
+workspace/mgx_frontend/node_modules/
+workspace/mgx_frontend/dist/
+workspace/mgx_frontend/build/
 
