@@ -10,26 +10,40 @@
 
 ## 🚀 快速开始
 
+### ⚠️ 重要：使用同一个 Supabase 项目
+
+**不需要创建新的数据库！** Supabase Storage 和 Database 都在同一个 Supabase 项目中：
+
+- ✅ **Database**：存储结构化数据（users, projects, conversations 等表）
+- ✅ **Storage**：存储文件（项目 zip 文件）
+
+你只需要：
+1. 使用**同一个 Supabase 项目**（已经配置了 Database 的那个）
+2. 添加 Storage 相关的环境变量
+
 ### 1. 获取 Supabase 凭证
 
-1. 访问你的 Supabase 项目：https://supabase.com
+1. 访问你的 Supabase 项目：https://supabase.com（**使用已有的项目，不需要新建**）
 2. 进入 **Settings** → **API**
 3. 复制以下信息：
-   - **Project URL** (`SUPABASE_URL`)
+   - **Project URL** (`SUPABASE_URL`) - 应该和 `DATABASE_URL` 中的域名相同
    - **Service Role Key** (`SUPABASE_SERVICE_ROLE_KEY`) ⚠️ **重要：使用 Service Role Key，不是 anon key**
 
 ### 2. 在 Railway 配置环境变量
 
 1. 进入 Railway 项目控制台
 2. 点击 **Variables** 标签页
-3. 添加以下环境变量：
+3. 添加以下环境变量（**在现有的 `DATABASE_URL` 基础上添加**）：
 
    ```
    SUPABASE_URL=https://your-project.supabase.co
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
    ```
 
-   **⚠️ 重要提示**：
+   **📝 说明**：
+   - `SUPABASE_URL` 可以从 `DATABASE_URL` 中提取
+     - 如果 `DATABASE_URL` 是：`postgresql://postgres:password@db.xxx.supabase.co:5432/postgres`
+     - 那么 `SUPABASE_URL` 是：`https://xxx.supabase.co`（去掉 `db.` 前缀，使用 `https://`）
    - 必须使用 **Service Role Key**，不是 anon key
    - Service Role Key 有完整权限，可以创建 bucket 和上传文件
    - 不要将 Service Role Key 暴露给前端
