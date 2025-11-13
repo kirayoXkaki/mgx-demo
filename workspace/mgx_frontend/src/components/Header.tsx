@@ -142,7 +142,7 @@ export function Header() {
             className="gap-2 text-pink-700 dark:text-pink-300 hover:bg-pink-100 dark:hover:bg-pink-900 rounded-xl transition-all transform hover:scale-105"
           >
             <History className="w-4 h-4" />
-            历史记录
+            History
           </Button>
         )}
         

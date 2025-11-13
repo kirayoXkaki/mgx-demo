@@ -150,7 +150,7 @@ export function ConversationHistory({ onClose }: ConversationHistoryProps) {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-pink-200 dark:border-pink-800">
           <h2 className="text-xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 dark:from-pink-400 dark:to-purple-400 bg-clip-text text-transparent">
-            对话历史记录
+            Conversation History
           </h2>
           <button
             onClick={onClose}
@@ -166,7 +166,7 @@ export function ConversationHistory({ onClose }: ConversationHistoryProps) {
           <div className="w-1/3 border-r border-pink-200 dark:border-pink-800 flex flex-col">
             <div className="p-3 border-b border-pink-200 dark:border-pink-800">
               <p className="text-sm text-pink-600 dark:text-pink-400">
-                共 {conversations.length} 条记录
+                {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
               </p>
             </div>
             <ScrollArea className="flex-1">
@@ -177,7 +177,7 @@ export function ConversationHistory({ onClose }: ConversationHistoryProps) {
               ) : conversations.length === 0 ? (
                 <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                   <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>暂无历史记录</p>
+                  <p>No conversation history</p>
                 </div>
               ) : (
                 <div className="p-2 space-y-2">
@@ -201,13 +201,13 @@ export function ConversationHistory({ onClose }: ConversationHistoryProps) {
                             <span>{formatDate(conv.updated_at)}</span>
                           </div>
                           <p className="text-xs text-pink-500 dark:text-pink-500 mt-1">
-                            {conv.messages.length} 条消息
+                            {conv.messages.length} message{conv.messages.length !== 1 ? 's' : ''}
                           </p>
                         </div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            if (confirm('确定要删除这条记录吗？')) {
+                            if (confirm('Are you sure you want to delete this conversation?')) {
                               deleteConversation(conv.id)
                             }
                           }}
@@ -252,7 +252,7 @@ export function ConversationHistory({ onClose }: ConversationHistoryProps) {
                         }`}
                       >
                         <div className="text-xs font-medium text-pink-700 dark:text-pink-300 mb-1">
-                          {msg.role === 'user' ? '你' : (msg.roleName || '助手')}
+                          {msg.role === 'user' ? 'You' : (msg.roleName || 'Assistant')}
                         </div>
                         <div className="text-sm text-pink-900 dark:text-pink-100 whitespace-pre-wrap">
                           {msg.content}
@@ -279,7 +279,7 @@ export function ConversationHistory({ onClose }: ConversationHistoryProps) {
                     }}
                     className="w-full pokemon-gradient hover:pokemon-glow text-white"
                   >
-                    加载到聊天面板 {selectedConversation.project_id && '（含代码）'}
+                    Load to Chat Panel {selectedConversation.project_id && '(with code)'}
                   </Button>
                 </div>
               </>
@@ -287,7 +287,7 @@ export function ConversationHistory({ onClose }: ConversationHistoryProps) {
               <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
                 <div className="text-center">
                   <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p>选择一条记录查看详情</p>
+                  <p>Select a conversation to view details</p>
                 </div>
               </div>
             )}
