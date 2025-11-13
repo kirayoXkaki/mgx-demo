@@ -11,10 +11,12 @@ class WriteDesign(Action):
     
     def build_prompt(self, context: str) -> str:
         """Build prompt for writing system design."""
-        return f"""You are a Software Architect. Based on the PRD below, design a complete software system architecture.
+        return f"""You are a Software Architect. Based on the PRD below, design a complete software system architecture WITH DETAILED APPLICATION LOGIC.
 
 PRD (Product Requirements Document):
 {context}
+
+CRITICAL: This design document must include BOTH architecture AND detailed application logic implementation. Do NOT just describe the architecture framework - you MUST specify the actual game logic, business logic, algorithms, and implementation details.
 
 Please write a detailed System Design Document that includes:
 
@@ -52,18 +54,73 @@ Please write a detailed System Design Document that includes:
    - File organization
    - Module breakdown
 
-7. **Implementation Plan**
-   - Development phases
-   - Component dependencies
-   - Build order
+7. **DETAILED APPLICATION LOGIC (MOST IMPORTANT)**
+   This section is CRITICAL and must be very detailed:
+   
+   **For Games:**
+   - Complete game mechanics and rules
+   - Game state management (initial state, game states, transitions)
+   - Game loop design (update cycle, render cycle)
+   - Core game algorithms (e.g., collision detection, scoring, win/lose conditions)
+   - Player input handling and response
+   - Game entities and their behaviors
+   - Animation and rendering logic
+   - Score calculation and progression
+   - Level/mode management
+   - Specific game features implementation (e.g., for Pac-Man: ghost AI, pellet collection, power-up mechanics)
+   
+   **For Web Applications:**
+   - Complete business logic flows
+   - User workflows and state transitions
+   - Data processing algorithms
+   - Feature-specific implementation logic
+   - User interaction handlers
+   - State management approach
+   - Form validation and processing
+   - Data transformation logic
+   
+   **For Other Applications:**
+   - Core functionality algorithms
+   - Business rules and logic
+   - Data processing workflows
+   - User interaction patterns
+   - State management
+   - Event handling logic
 
-8. **Non-Functional Requirements**
-   - Performance considerations
-   - Scalability approach
-   - Security measures
-   - Error handling strategy
+8. **Core Algorithms and Data Structures**
+   - Key algorithms used (with pseudocode or detailed description)
+   - Data structures for game state, entities, etc.
+   - Performance considerations for algorithms
+   - Edge cases and how to handle them
 
-Please be specific and technical. The design should be detailed enough for engineers to start coding immediately.
+9. **User Interface Logic**
+   - UI component interactions
+   - User input handling
+   - Event flow and propagation
+   - State updates triggered by user actions
+   - Visual feedback mechanisms
+
+10. **Implementation Plan**
+    - Development phases
+    - Component dependencies
+    - Build order
+    - Specific implementation steps for each feature
+
+11. **Non-Functional Requirements**
+    - Performance considerations
+    - Scalability approach
+    - Security measures
+    - Error handling strategy
+
+IMPORTANT REMINDERS:
+- The design must be SPECIFIC enough that an engineer can implement the COMPLETE, WORKING APPLICATION directly from this document
+- Include concrete examples, algorithms, and logic flows
+- Describe HOW features work, not just WHAT features exist
+- For games: specify game rules, mechanics, and logic in detail
+- For apps: specify business logic, workflows, and data processing in detail
+- Avoid vague descriptions - be concrete and actionable
+
+Please be specific and technical. The design should be detailed enough for engineers to start coding immediately AND understand exactly how to implement the application logic.
 
 Output the design document in markdown format."""
     
