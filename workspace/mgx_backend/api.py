@@ -266,6 +266,49 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
                     print("✅ Code saved")
                     # List saved files
                     print(f"   Saved files: {repo.srcs.all_files}")
+                    
+                    # Read all saved code files and send to frontend via WebSocket
+                    print("📤 Sending saved code files to frontend...")
+                    for filepath in repo.srcs.all_files:
+                        try:
+                            content = await repo.srcs.read(filepath)
+                            if content:
+                                # Send file_update event
+                                await send_progress(task_id, {
+                                    "type": "file_update",
+                                    "filepath": f"src/{filepath}",
+                                    "file_action": "creating",
+                                    "progress": tasks[task_id].get("progress", 90),
+                                    "stage": tasks[task_id].get("current_stage", "Saving project files..."),
+                                    "cost": ctx.cost_manager.total_cost,
+                                    "message": f"Created file: src/{filepath}"
+                                })
+                                
+                                # Send file_content event
+                                await send_progress(task_id, {
+                                    "type": "file_content",
+                                    "filepath": f"src/{filepath}",
+                                    "content": content,
+                                    "progress": tasks[task_id].get("progress", 90),
+                                    "stage": tasks[task_id].get("current_stage", "Saving project files..."),
+                                    "cost": ctx.cost_manager.total_cost,
+                                    "message": f"File content: src/{filepath}"
+                                })
+                                
+                                # Send file_complete event
+                                await send_progress(task_id, {
+                                    "type": "file_complete",
+                                    "filepath": f"src/{filepath}",
+                                    "content": content,
+                                    "progress": tasks[task_id].get("progress", 90),
+                                    "stage": tasks[task_id].get("current_stage", "Saving project files..."),
+                                    "cost": ctx.cost_manager.total_cost,
+                                    "message": f"File complete: src/{filepath}"
+                                })
+                                print(f"   ✅ Sent: src/{filepath} ({len(content)} chars)")
+                        except Exception as e:
+                            print(f"   ❌ Error sending file {filepath}: {e}")
+                    
                     # Also check root files
                     from pathlib import Path
                     project_root = Path(ctx.project_path)
