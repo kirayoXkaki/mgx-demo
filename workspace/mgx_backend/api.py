@@ -324,13 +324,18 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
                         try:
                             content = await repo.srcs.read(filepath)
                             if content:
+                                # Get current task status
+                                task_dict = get_task_dict(task_id)
+                                current_progress = task_dict.get("progress", 90) if task_dict else 90
+                                current_stage = task_dict.get("current_stage", "Saving project files...") if task_dict else "Saving project files..."
+                                
                                 # Send file_update event
                                 await send_progress(task_id, {
                                     "type": "file_update",
                                     "filepath": f"src/{filepath}",
                                     "file_action": "creating",
-                                    "progress": tasks[task_id].get("progress", 90),
-                                    "stage": tasks[task_id].get("current_stage", "Saving project files..."),
+                                    "progress": current_progress,
+                                    "stage": current_stage,
                                     "cost": ctx.cost_manager.total_cost,
                                     "message": f"Created file: src/{filepath}"
                                 })
@@ -340,8 +345,8 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
                                     "type": "file_content",
                                     "filepath": f"src/{filepath}",
                                     "content": content,
-                                    "progress": tasks[task_id].get("progress", 90),
-                                    "stage": tasks[task_id].get("current_stage", "Saving project files..."),
+                                    "progress": current_progress,
+                                    "stage": current_stage,
                                     "cost": ctx.cost_manager.total_cost,
                                     "message": f"File content: src/{filepath}"
                                 })
@@ -351,8 +356,8 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
                                     "type": "file_complete",
                                     "filepath": f"src/{filepath}",
                                     "content": content,
-                                    "progress": tasks[task_id].get("progress", 90),
-                                    "stage": tasks[task_id].get("current_stage", "Saving project files..."),
+                                    "progress": current_progress,
+                                    "stage": current_stage,
                                     "cost": ctx.cost_manager.total_cost,
                                     "message": f"File complete: src/{filepath}"
                                 })
@@ -718,14 +723,17 @@ async def delete_task(task_id: str):
 @app.post("/api/github/upload")
 async def upload_to_github(request: GitHubUploadRequest):
     """Upload project to GitHub repository."""
-    if request.task_id not in tasks:
+    task_dict = get_task_dict(request.task_id)
+    if not task_dict:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    task = tasks[request.task_id]
-    if task["status"] != "completed":
+    if task_dict["status"] != "completed":
         raise HTTPException(status_code=400, detail="Task not completed")
     
-    project_path = Path(task["result"]["project_path"])
+    if not task_dict.get("result") or not task_dict["result"].get("project_path"):
+        raise HTTPException(status_code=404, detail="Project path not found")
+    
+    project_path = Path(task_dict["result"]["project_path"])
     if not project_path.exists():
         raise HTTPException(status_code=404, detail="Project files not found")
     
