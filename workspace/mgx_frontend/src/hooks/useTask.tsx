@@ -308,7 +308,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const downloadProject = useCallback(async () => {
     if (!currentTask?.task_id) return
     
-    window.open(`/api/download/${currentTask.task_id}`, '_blank')
+    window.open(`${API_URL}/api/download/${currentTask.task_id}`, '_blank')
   }, [currentTask?.task_id])
 
   const clearFiles = useCallback(() => {

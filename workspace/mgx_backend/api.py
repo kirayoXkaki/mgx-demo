@@ -782,19 +782,100 @@ async def get_files(task_id: str):
 @app.get("/api/download/{task_id}")
 async def download_project(task_id: str):
     """Download the generated project as a zip file."""
+    project_path = None
+    
+    # Get task from database
     task_dict = get_task_dict(task_id)
-    if not task_dict:
-        raise HTTPException(status_code=404, detail="Task not found")
+    if task_dict:
+        if task_dict["status"] != "completed":
+            raise HTTPException(status_code=400, detail="Task not completed")
+        if task_dict.get("result") and task_dict["result"].get("project_path"):
+            project_path = task_dict["result"]["project_path"]
     
-    if task_dict["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Task not completed")
+    if not project_path:
+        # Try to get from database by project_id (if task_id is numeric)
+        try:
+            project_id = int(task_id)
+            db = get_db_manager()
+            project = db.get_project(project_id)
+            if project and project.project_path:
+                project_path = project.project_path
+                print(f"📁 [API] Found project_path from database by project_id: {project_path}")
+        except (ValueError, TypeError):
+            # task_id is not numeric (UUID), try to find project by searching conversations
+            db = get_db_manager()
+            try:
+                from mgx_backend.database import ConversationHistoryModel, get_db
+                
+                db_session = next(get_db())
+                try:
+                    # Find conversation with this task_id in extra_data
+                    all_conversations = db_session.query(ConversationHistoryModel).all()
+                    matching_conversation = None
+                    for conv in all_conversations:
+                        if conv.extra_data and isinstance(conv.extra_data, dict):
+                            if conv.extra_data.get("task_id") == task_id:
+                                matching_conversation = conv
+                                break
+                    
+                    if matching_conversation and matching_conversation.project_id:
+                        project = db.get_project(matching_conversation.project_id)
+                        if project and project.project_path:
+                            project_path = project.project_path
+                            print(f"📁 [API] Found project_path from conversation: {project_path}")
+                finally:
+                    db_session.close()
+            except Exception as e:
+                print(f"⚠️ [API] Error searching conversations for task_id {task_id}: {e}")
+            
+            # If still not found, try to find project by reconstructing path
+            if not project_path:
+                import os
+                from mgx_backend.config import Config
+                
+                config = Config.default()
+                workspace_str = config.project.workspace if hasattr(config.project, 'workspace') else "./workspace"
+                
+                script_dir = Path(__file__).parent.resolve()
+                workspace_root = script_dir.parent
+                
+                workspace_candidates = [
+                    workspace_root / workspace_str.lstrip("./"),
+                    workspace_root / "workspace",
+                    Path(workspace_str).resolve() if Path(workspace_str).is_absolute() else workspace_root / workspace_str.lstrip("./"),
+                    Path(os.getcwd()) / workspace_str.lstrip("./"),
+                    Path(os.getcwd()) / "workspace",
+                ]
+                
+                workspace = None
+                for ws_candidate in workspace_candidates:
+                    if ws_candidate.exists() and ws_candidate.is_dir():
+                        workspace = ws_candidate.resolve()
+                        break
+                
+                if not workspace:
+                    workspace = workspace_root / "workspace"
+                
+                # Try standard pattern: workspace/project_{task_id}
+                potential_path = workspace / f"project_{task_id}"
+                if potential_path.exists() and potential_path.is_dir():
+                    project_path = str(potential_path.resolve())
+                    print(f"📁 [API] Found project_path from filesystem: {project_path}")
+                else:
+                    # Try to find in workspace directory by matching task_id in directory name
+                    if workspace.exists():
+                        for project_dir in workspace.iterdir():
+                            if project_dir.is_dir() and task_id in project_dir.name:
+                                project_path = str(project_dir.resolve())
+                                print(f"📁 [API] Found project_path by pattern match: {project_path}")
+                                break
     
-    if not task_dict.get("result") or not task_dict["result"].get("project_path"):
+    if not project_path:
         raise HTTPException(status_code=404, detail="Project path not found")
     
-    project_path = Path(task_dict["result"]["project_path"])
+    project_path = Path(project_path)
     if not project_path.exists():
-        raise HTTPException(status_code=404, detail="Project files not found")
+        raise HTTPException(status_code=404, detail="Project files not found on disk")
     
     # Create zip file
     zip_path = f"/tmp/{task_id}.zip"
