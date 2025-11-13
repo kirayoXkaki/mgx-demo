@@ -27,6 +27,14 @@ export function FileEditor() {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [showProgress, setShowProgress] = useState(true)
 
+  // Reset UI when files are cleared (new chat)
+  useEffect(() => {
+    if (files.length === 0 && streamingFiles.size === 0) {
+      setSelectedFile(null)
+      setExpandedFolders(new Set())
+    }
+  }, [files.length, streamingFiles.size])
+
   // Auto-select first streaming file
   useEffect(() => {
     if (streamingFiles.size > 0) {
