@@ -3,8 +3,7 @@ import { useAuth } from '../hooks/useAuth'
 import { ScrollArea } from './ui/scroll-area'
 import { Button } from './ui/button'
 import { X, MessageSquare, Calendar, Trash2, Loader2 } from 'lucide-react'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_URL } from '../lib/api'
 
 interface Conversation {
   id: number

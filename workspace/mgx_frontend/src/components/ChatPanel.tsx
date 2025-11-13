@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
 import { ScrollArea } from './ui/scroll-area'
+import { API_URL } from '../lib/api'
 
 interface ChatMessage {
   id: string
@@ -14,8 +15,6 @@ interface ChatMessage {
   type?: 'thinking' | 'working' | 'message' | 'complete'
   timestamp: Date
 }
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export function ChatPanel() {
   const [idea, setIdea] = useState('')
