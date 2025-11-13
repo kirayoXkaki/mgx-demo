@@ -400,16 +400,39 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
             
             # Get task to find user_id if available
             task_dict = get_task_dict(task_id)
-            user_id = task_dict.get("user_id") if task_dict else None
+            user_id = None
             
-            # If no user_id in task, try to get from task's extra_data or use default user
+            # Try to get user_id from task's result or extra_data
+            if task_dict:
+                if task_dict.get("result") and isinstance(task_dict["result"], dict):
+                    user_id = task_dict["result"].get("user_id")
+                # Also check if task has extra_data with user_id
+                if not user_id and task_dict.get("extra_data"):
+                    if isinstance(task_dict["extra_data"], dict):
+                        user_id = task_dict["extra_data"].get("user_id")
+            
+            # If no user_id in task, try to find from conversations that reference this task_id
             if not user_id:
-                # Try to find a default user (first user in database) for anonymous tasks
-                # In production, you should always have a user_id
+                from mgx_backend.database import ConversationHistoryModel, get_db
+                db_session = next(get_db())
+                try:
+                    # Find conversation with this task_id in extra_data
+                    all_conversations = db_session.query(ConversationHistoryModel).all()
+                    for conv in all_conversations:
+                        if conv.extra_data and isinstance(conv.extra_data, dict):
+                            if conv.extra_data.get("task_id") == task_id:
+                                user_id = conv.user_id
+                                print(f"📁 [API] Found user_id from conversation: {user_id}")
+                                break
+                finally:
+                    db_session.close()
+            
+            # If still no user_id, try to find a default user (first user in database)
+            if not user_id:
                 users = db.list_users(limit=1)
                 if users:
                     user_id = users[0].id
-                    print(f"⚠️ [API] No user_id in task, using default user: {user_id}")
+                    print(f"⚠️ [API] No user_id found, using default user: {user_id}")
                 else:
                     print(f"⚠️ [API] No users found in database, cannot create project")
                     user_id = None
