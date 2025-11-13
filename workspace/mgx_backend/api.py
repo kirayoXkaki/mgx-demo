@@ -482,6 +482,21 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
                         print(f"✅ [API] Project saved successfully: project_id={project.id}, task_id={task_id}")
                 finally:
                     db_session.close()
+                
+                # Upload project files to Supabase Storage if configured
+                try:
+                    supabase_url = os.getenv("SUPABASE_URL")
+                    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+                    
+                    if supabase_url and supabase_key:
+                        print(f"📤 [API] Uploading project to Supabase Storage: {task_id}")
+                        await upload_project_to_supabase(task_id, ctx.project_path, project.id)
+                    else:
+                        print(f"⚠️ [API] Supabase Storage not configured (SUPABASE_URL or SUPABASE_KEY not set)")
+                except Exception as e:
+                    print(f"⚠️ [API] Failed to upload project to Supabase Storage: {e}")
+                    import traceback
+                    traceback.print_exc()
             else:
                 print(f"⚠️ [API] Cannot create project: no user_id available")
             
