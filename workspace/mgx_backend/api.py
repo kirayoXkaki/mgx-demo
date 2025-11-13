@@ -875,11 +875,46 @@ async def download_project(task_id: str):
     
     project_path = Path(project_path)
     if not project_path.exists():
-        raise HTTPException(status_code=404, detail="Project files not found on disk")
+        # Try to provide more helpful error message
+        print(f"❌ [API] Project path does not exist: {project_path}")
+        print(f"   Current working directory: {Path.cwd()}")
+        print(f"   Absolute path: {project_path.resolve() if project_path.is_absolute() else Path.cwd() / project_path}")
+        
+        # Check if it's a relative path issue
+        if not project_path.is_absolute():
+            # Try to resolve relative path
+            resolved_path = Path.cwd() / project_path
+            if resolved_path.exists():
+                project_path = resolved_path
+                print(f"✅ [API] Found project using resolved path: {project_path}")
+            else:
+                # Try from script directory
+                script_dir = Path(__file__).parent.parent
+                resolved_path = script_dir / project_path
+                if resolved_path.exists():
+                    project_path = resolved_path
+                    print(f"✅ [API] Found project using script-relative path: {project_path}")
+                else:
+                    raise HTTPException(
+                        status_code=404, 
+                        detail=f"Project files not found on disk. Path: {project_path}. This may happen if the project was deleted or the server was restarted."
+                    )
+        else:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Project files not found on disk. Path: {project_path}. This may happen if the project was deleted or the server was restarted."
+            )
     
     # Create zip file
     zip_path = f"/tmp/{task_id}.zip"
-    shutil.make_archive(zip_path.replace('.zip', ''), 'zip', project_path)
+    try:
+        shutil.make_archive(zip_path.replace('.zip', ''), 'zip', project_path)
+    except Exception as e:
+        print(f"❌ [API] Failed to create zip file: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create zip file: {str(e)}")
+    
+    if not Path(zip_path).exists():
+        raise HTTPException(status_code=500, detail="Zip file was not created")
     
     return FileResponse(
         zip_path,
