@@ -13,9 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Expose port (Railway will set PORT env var)
+# Expose port
 EXPOSE 8000
 
 # Start command
-CMD uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}
-
+# 关键：PYTHONPATH 指向 /app，这样 Python 可以在 /app 下找到 mgx_backend 模块
+CMD sh -c "PYTHONPATH=/app uvicorn api:app --host 0.0.0.0 --port \${PORT:-8000}"
