@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { Task, FileItem, ProgressUpdate } from '../types'
+import { API_URL } from '../lib/api'
 
 interface TaskContextType {
   currentTask: Task | null
@@ -28,7 +29,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     setIsGenerating(true)
     
     try {
-      const response = await fetch('/api/generate', {
+      const response = await fetch(`${API_URL}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idea, investment, n_round: 5 }),
@@ -56,9 +57,10 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         updated_at: new Date().toISOString(),
       })
       
-      // Connect WebSocket (use relative path to go through vite proxy)
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const wsUrl = `${protocol}//${window.location.host}/api/ws/${taskId}`
+      // Connect WebSocket (use API_URL for production, relative path for local dev)
+      const wsProtocol = API_URL.startsWith('https') ? 'wss:' : 'ws:'
+      const wsHost = API_URL.replace(/^https?:\/\//, '').replace(/^wss?:\/\//, '')
+      const wsUrl = `${wsProtocol}//${wsHost}/api/ws/${taskId}`
       const websocket = new WebSocket(wsUrl)
       
       websocket.onopen = () => {
