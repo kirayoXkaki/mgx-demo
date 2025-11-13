@@ -25,7 +25,6 @@ export function ChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
-  const [userScrolled, setUserScrolled] = useState(false)
   const lastMessageCountRef = useRef(0)
   const [savingHistory, setSavingHistory] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(null)
@@ -33,7 +32,6 @@ export function ChatPanel() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     setShowScrollToBottom(false)
-    setUserScrolled(false)
   }
   
   // Check if user is near bottom of scroll area
