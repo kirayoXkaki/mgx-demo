@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { File, Folder, FolderOpen, Loader2 } from 'lucide-react'
+import { File, FolderOpen, Loader2 } from 'lucide-react'
 import { useTask } from '../hooks/useTask'
 import { ScrollArea } from './ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
@@ -55,7 +55,7 @@ export function FileExplorer() {
       .map(([path, content]) => ({
         path,
         content,
-        type: (path.includes('src/') ? 'source' : 'document') as const
+        type: path.includes('src/') ? 'source' : 'document'
       }))
   ]
 

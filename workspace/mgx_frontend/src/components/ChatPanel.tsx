@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Loader2, Brain, FileText, Code, ChevronDown, MessageSquarePlus } from 'lucide-react'
+import { Send, Loader2, Brain, ChevronDown, MessageSquarePlus } from 'lucide-react'
 import { useTask } from '../hooks/useTask'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from './ui/button'
@@ -750,13 +750,6 @@ export function ChatPanel() {
           )}
           
           {messages.map((msg) => {
-            const getRoleIcon = () => {
-              if (msg.roleName === 'ProductManager') return <FileText className="w-4 h-4" />
-              if (msg.roleName === 'Architect') return <FileText className="w-4 h-4" />
-              if (msg.roleName === 'Engineer') return <Code className="w-4 h-4" />
-              return null
-            }
-            
             const getRoleColor = () => {
               if (msg.roleName === 'ProductManager') return 'bg-gradient-to-br from-pink-50 via-pink-100 to-purple-50 dark:from-pink-900 dark:via-pink-800 dark:to-purple-900 border-pink-300 dark:border-pink-600'
               if (msg.roleName === 'Architect') return 'bg-gradient-to-br from-purple-50 via-purple-100 to-pink-50 dark:from-purple-900 dark:via-purple-800 dark:to-pink-900 border-purple-300 dark:border-purple-600'

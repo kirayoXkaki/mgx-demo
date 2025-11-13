@@ -32,7 +32,7 @@ export interface FileItem {
 
 export interface ProgressUpdate {
   type: 'status' | 'progress' | 'complete' | 'error' | 'thinking' | 'action_start' | 'action_executing' | 'action_complete' | 'saving' | 'stream_chunk' | 'file_update' | 'file_content' | 'file_complete' | 'chat_message'
-  status?: string
+  status?: 'pending' | 'running' | 'completed' | 'failed' | string
   stage?: string
   progress?: number
   message?: string
@@ -45,4 +45,5 @@ export interface ProgressUpdate {
   filepath?: string
   content?: string
   file_action?: string
+  cost?: number
 }

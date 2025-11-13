@@ -109,19 +109,22 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         setCurrentTask((prev) => {
           if (!prev) return null
           
+          // Type assertion for status to ensure it matches Task type
+          const statusValue = update.status as 'pending' | 'running' | 'completed' | 'failed' | undefined
+          
           return {
             ...prev,
-            status: update.status || prev.status,
-              progress: update.progress !== undefined ? update.progress : prev.progress,
+            status: statusValue || prev.status,
+            progress: update.progress !== undefined ? update.progress : prev.progress,
             current_stage: update.stage || prev.current_stage,
             result: update.result || prev.result,
             error: update.error || prev.error,
-              // IMPORTANT: For chat_message type, always use the new message (don't fallback to prev)
-              message: (update.type === 'chat_message' && update.message) ? update.message : (update.message || prev.message),
-              role: update.role || prev.role,
-              action: update.action || prev.action,
-              // Update cost if provided in update
-              cost: update.cost !== undefined ? update.cost : prev.cost,
+            // IMPORTANT: For chat_message type, always use the new message (don't fallback to prev)
+            message: (update.type === 'chat_message' && update.message) ? update.message : (update.message || prev.message),
+            role: update.role || prev.role,
+            action: update.action || prev.action,
+            // Update cost if provided in update
+            cost: update.cost !== undefined ? update.cost : prev.cost,
             updated_at: new Date().toISOString(),
           }
         })

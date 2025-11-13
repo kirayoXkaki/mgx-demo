@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from './ui/button'
-import { FileText, Mail, Lock, User, Sparkles } from 'lucide-react'
+import { Mail, Lock, User, Sparkles } from 'lucide-react'
 
 export function LoginPage() {
   const [isLogin, setIsLogin] = useState(true)

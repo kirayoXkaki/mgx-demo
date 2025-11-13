@@ -59,7 +59,7 @@ export function ProgressPanel() {
     return 'pending'
   }
 
-  const currentStageIndex = getCurrentStageIndex()
+  // const currentStageIndex = getCurrentStageIndex() // Reserved for future use
 
   return (
     <div className="flex-1 flex flex-col bg-background min-h-0">
