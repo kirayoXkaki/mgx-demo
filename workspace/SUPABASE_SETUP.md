@@ -26,12 +26,25 @@
 1. 在 Supabase 控制台，进入项目
 2. 点击 **Settings** → **Database**
 3. 找到 **Connection string** 部分
-4. 选择 **URI** 格式
+4. 选择配置：
+   - **Type**: `URI` ✅
+   - **Source**: `Primary Database` ✅
+   - **Method**: `Session Pooler` ⭐ **推荐**（解决 IPv4 兼容性问题）
+     - 或者 `Direct connection`（如果 Railway 支持 IPv6）
 5. 复制连接字符串，格式如下：
    ```
+   # Session Pooler（推荐）
+   postgresql://postgres:[YOUR-PASSWORD]@db.xxx.supabase.co:6543/postgres?pgbouncer=true
+   
+   # Direct connection（如果支持 IPv6）
    postgresql://postgres:[YOUR-PASSWORD]@db.xxx.supabase.co:5432/postgres
    ```
 6. 将 `[YOUR-PASSWORD]` 替换为你的数据库密码
+
+**⚠️ 重要提示**：
+- 如果看到 "Not IPv4 compatible" 警告，**必须使用 Session Pooler**
+- Session Pooler 使用端口 `6543`，Direct connection 使用端口 `5432`
+- Railway 通常需要 IPv4，所以推荐使用 Session Pooler
 
 ### 3. 在 Railway 配置环境变量
 
