@@ -23,5 +23,6 @@ ENV PYTHONPATH=/app
 EXPOSE 8000
 
 # Start command - use mgx_backend.api since files are in /app/mgx_backend/
-# Railway sets PORT environment variable, use it directly
-CMD sh -c "uvicorn mgx_backend.api:app --host 0.0.0.0 --port \$PORT"
+# Railway sets PORT environment variable, but provide fallback
+# Also ensure we're listening on 0.0.0.0 (all interfaces)
+CMD sh -c "PORT=\${PORT:-8000} && echo 'Starting on port: $PORT' && uvicorn mgx_backend.api:app --host 0.0.0.0 --port \$PORT"
