@@ -46,7 +46,6 @@ export function ChatPanel() {
     
     if (isNearBottom) {
       setShowScrollToBottom(false)
-      setUserScrolled(false)
     } else {
       // Only show scroll button if there are new messages
       if (messages.length > lastMessageCountRef.current) {
