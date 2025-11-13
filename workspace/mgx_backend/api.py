@@ -607,6 +607,87 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
             del pending_messages[task_id]
 
 
+async def upload_project_to_supabase(task_id: str, project_path: str, project_id: int):
+    """Upload project files to Supabase Storage."""
+    try:
+        from supabase import create_client, Client
+        
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+        
+        if not supabase_url or not supabase_key:
+            print(f"⚠️ [Supabase] Missing SUPABASE_URL or SUPABASE_KEY")
+            return
+        
+        supabase: Client = create_client(supabase_url, supabase_key)
+        
+        # Create zip file in memory
+        zip_buffer = io.BytesIO()
+        project_root = Path(project_path)
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for file_path in project_root.rglob("*"):
+                if file_path.is_file():
+                    rel_path = file_path.relative_to(project_root)
+                    rel_path_str = str(rel_path)
+                    
+                    # Skip hidden files and build artifacts
+                    if rel_path.name.startswith('.') or rel_path.suffix in ['.pyc', '.pyo']:
+                        continue
+                    if any(skip_dir in rel_path_str for skip_dir in ['node_modules', '.git', 'dist', 'build', '__pycache__']):
+                        continue
+                    
+                    try:
+                        zip_file.write(file_path, rel_path_str)
+                    except Exception as e:
+                        print(f"⚠️ [Supabase] Error adding {rel_path_str} to zip: {e}")
+        
+        zip_buffer.seek(0)
+        zip_data = zip_buffer.read()
+        
+        # Upload to Supabase Storage
+        storage_path = f"projects/{task_id}.zip"
+        
+        # Ensure bucket exists (create if not exists)
+        try:
+            buckets = supabase.storage.list_buckets()
+            bucket_names = [b.name for b in buckets]
+            if "projects" not in bucket_names:
+                print(f"📦 [Supabase] Creating 'projects' bucket...")
+                supabase.storage.create_bucket("projects", public=False)
+        except Exception as e:
+            print(f"⚠️ [Supabase] Error checking/creating bucket: {e}")
+        
+        # Upload file
+        result = supabase.storage.from_("projects").upload(
+            storage_path,
+            zip_data,
+            file_options={"content-type": "application/zip", "upsert": "true"}
+        )
+        
+        print(f"✅ [Supabase] Project uploaded to Storage: {storage_path}")
+        
+        # Store storage path in project extra_data
+        from mgx_backend.database import ProjectModel, get_db
+        db_session = next(get_db())
+        try:
+            db_project = db_session.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+            if db_project:
+                extra_data = db_project.extra_data or {}
+                extra_data["storage_path"] = storage_path
+                db_project.extra_data = extra_data
+                db_session.commit()
+                print(f"✅ [Supabase] Storage path saved to project: {storage_path}")
+        finally:
+            db_session.close()
+            
+    except Exception as e:
+        print(f"❌ [Supabase] Failed to upload project: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
 @app.get("/api/files/{task_id}")
 async def get_files(task_id: str):
     """Get list of generated files."""
