@@ -72,7 +72,6 @@ export function ChatPanel() {
     if (!scrollElement) return
     
     const handleScroll = () => {
-      setUserScrolled(true)
       checkScrollPosition()
     }
     
@@ -506,7 +505,6 @@ export function ChatPanel() {
     setMessages([])
     setCurrentConversationId(null)
     setIdea('')
-    setUserScrolled(false)
     setShowScrollToBottom(false)
     lastMessageCountRef.current = 0
     
