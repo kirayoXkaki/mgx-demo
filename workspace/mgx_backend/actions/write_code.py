@@ -24,26 +24,57 @@ CRITICAL INSTRUCTIONS:
 - ONLY output the FILE: markers and code content
 - Code comments inside files are allowed and encouraged
 
-MOST IMPORTANT - APPLICATION IMPLEMENTATION:
-You MUST implement the COMPLETE, WORKING APPLICATION, not just the architecture framework.
+MOST IMPORTANT - APPLICATION LOGIC IMPLEMENTATION:
+You MUST implement the COMPLETE, WORKING APPLICATION with ALL game logic, not just the server framework or empty classes.
 
-For example:
-- If building a game: Implement the FULL game logic, game loop, rendering, input handling, scoring, win/lose conditions
-- If building a web app: Implement ALL pages, components, API endpoints, database operations, authentication, business logic
-- If building a calculator: Implement ALL mathematical operations, UI interactions, error handling
-- If building a todo app: Implement ALL CRUD operations, state management, persistence, UI interactions
+**For Games - YOU MUST IMPLEMENT:**
+1. **Complete Game Logic Class/Module**:
+   - Game state management class with ALL properties and methods
+   - Game loop implementation (update() and render() methods with full logic)
+   - Player movement logic (exact position calculation, direction handling, collision checking)
+   - Enemy/NPC AI logic (complete AI algorithms, pathfinding, decision-making)
+   - Collision detection functions (complete coordinate checking, bounding box logic)
+   - Game mechanics (scoring, win/lose conditions, level progression)
+   - Entity management (creation, update, destruction of all game objects)
 
-DO NOT just create:
-- Empty class definitions
-- Placeholder functions
-- Skeleton code without implementation
-- Architecture-only code
+2. **Game Loop Implementation**:
+   - MUST have a working game loop (setInterval, requestAnimationFrame, or similar)
+   - Each iteration MUST: process input, update game state, check collisions, render
+   - MUST implement all update logic for all entities
 
-INSTEAD, you MUST create:
-- Complete, runnable application code
-- Full business logic implementation
-- All user interactions and features
-- Working functionality that can be executed immediately
+3. **Game Logic Functions**:
+   - Player movement: calculateNextPosition(), handleInput(), checkWallCollision()
+   - Enemy AI: calculateEnemyPath(), updateEnemyPosition(), enemyDecisionLogic()
+   - Collision: checkCollision(), handleCollision(), resolveCollision()
+   - Game mechanics: updateScore(), checkWinCondition(), checkLoseCondition()
+   - State management: initializeGame(), resetGame(), changeGameState()
+
+4. **Data Structures**:
+   - Game state object/class with ALL properties initialized
+   - Player object with position, direction, speed, state, etc.
+   - Enemy objects with positions, AI states, behaviors
+   - Map/grid data structure with walls, paths, collectibles
+   - All game entities as complete objects/classes
+
+5. **DO NOT create**:
+   - Empty class definitions with no methods
+   - Placeholder functions like "// TODO: implement movement"
+   - Skeleton code without implementation
+   - Server routes without game logic
+   - Database models without game state management
+
+**For Web Applications - YOU MUST IMPLEMENT:**
+- Complete business logic in service/controller layers
+- All API endpoints with full request/response handling
+- Complete data processing and transformation logic
+- All user workflows and state transitions
+- Form validation and error handling
+
+**For Other Applications:**
+- Complete core functionality algorithms
+- All business rules and logic
+- Complete data processing workflows
+- All user interaction handlers
 
 Please write the complete implementation including:
 
@@ -52,7 +83,7 @@ Please write the complete implementation including:
    - Include complete, working code with ALL functionality implemented
    - NO placeholders, NO TODOs, NO "// TODO: implement this"
    - Implement ALL functions, methods, and classes completely
-   - Include ALL business logic, game logic, or application logic
+   - Include ALL game logic, business logic, or application logic
    - Follow best practices and coding standards
    - Add appropriate comments INSIDE the code files
 
@@ -95,8 +126,10 @@ IMPORTANT:
 - Do NOT explain what the code does outside of code comments
 - Do NOT write sentences like "This is..." or "We need to..." after code blocks
 - IMPLEMENT EVERYTHING - no placeholders, no stubs, no empty functions
+- For games: MUST include complete game loop, movement logic, collision detection, AI, scoring, win/lose conditions
+- For apps: MUST include complete business logic, workflows, data processing
 
-Make sure every file is complete and functional. The code should be ready to run and the application should work immediately after installation."""
+Make sure every file is complete and functional. The code should be ready to run and the application should work immediately after installation. The game must be playable with all core mechanics working."""
     
     async def run(self, context: str, stream_callback: Optional[callable] = None) -> str:
         """Execute WriteCode action."""

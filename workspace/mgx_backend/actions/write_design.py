@@ -54,20 +54,29 @@ Please write a detailed System Design Document that includes:
    - File organization
    - Module breakdown
 
-7. **DETAILED APPLICATION LOGIC (MOST IMPORTANT)**
-   This section is CRITICAL and must be very detailed:
+7. **DETAILED APPLICATION LOGIC (MOST IMPORTANT - REQUIRED)**
+   This section is CRITICAL and must be EXTREMELY detailed. This is NOT optional - you MUST include complete game logic design.
    
-   **For Games:**
-   - Complete game mechanics and rules
-   - Game state management (initial state, game states, transitions)
-   - Game loop design (update cycle, render cycle)
-   - Core game algorithms (e.g., collision detection, scoring, win/lose conditions)
-   - Player input handling and response
-   - Game entities and their behaviors
-   - Animation and rendering logic
-   - Score calculation and progression
-   - Level/mode management
-   - Specific game features implementation (e.g., for Pac-Man: ghost AI, pellet collection, power-up mechanics)
+   **For Games (REQUIRED - Must include ALL of these):**
+   - **Complete game mechanics and rules**: Detailed description of how the game works, step by step
+   - **Game state management**: Exact data structures for game state, initial state values, all possible game states (waiting, playing, paused, gameOver, win), state transition conditions
+   - **Game loop design**: Exact implementation of game loop - update cycle frequency, render cycle, what happens in each frame, timing mechanisms
+   - **Core game algorithms with pseudocode**:
+     * Collision detection algorithm (exact method, coordinate checking, bounding boxes)
+     * Scoring system (how points are calculated, when points are awarded)
+     * Win/lose conditions (exact conditions, how to check)
+     * Movement algorithms (how entities move, pathfinding if needed)
+   - **Player input handling**: Exact key/input mapping, input processing flow, how input affects game state
+   - **Game entities and their behaviors**: 
+     * For each entity (player, enemies, collectibles, obstacles): exact properties, behaviors, update logic
+     * Entity lifecycle (creation, update, destruction)
+     * Entity interactions (what happens when entities collide)
+   - **Animation and rendering logic**: How sprites/visuals are updated, animation frames, rendering order
+   - **Score calculation and progression**: Exact scoring rules, score display, high score tracking
+   - **Level/mode management**: How levels are structured, level progression, difficulty scaling
+   - **Specific game features implementation** (MUST be detailed):
+     * For Pac-Man: Ghost AI algorithm (chase mode, scatter mode, frightened mode), exact pathfinding logic, pellet collection mechanics, power pellet effects and duration, fruit spawning, tunnel mechanics
+     * For other games: All unique game mechanics with exact implementation details
    
    **For Web Applications:**
    - Complete business logic flows
@@ -87,11 +96,21 @@ Please write a detailed System Design Document that includes:
    - State management
    - Event handling logic
 
-8. **Core Algorithms and Data Structures**
-   - Key algorithms used (with pseudocode or detailed description)
-   - Data structures for game state, entities, etc.
-   - Performance considerations for algorithms
-   - Edge cases and how to handle them
+8. **Core Algorithms and Data Structures (REQUIRED)**
+   - **Key algorithms with detailed pseudocode**: Every major algorithm must have step-by-step pseudocode
+   - **Exact data structures**: Define exact data structures for:
+     * Game state object/class with all properties
+     * Player entity with all properties (position, direction, speed, state, etc.)
+     * Enemy entities with all properties
+     * Map/grid structure with exact representation
+     * All game objects and their properties
+   - **Algorithm implementations**: 
+     * Movement algorithms (how to calculate next position)
+     * Collision detection (exact coordinate checking logic)
+     * AI algorithms (for enemies/NPCs - exact decision-making logic)
+     * Game logic algorithms (scoring, win/lose checking, etc.)
+   - **Performance considerations**: How algorithms are optimized
+   - **Edge cases**: All edge cases and exact handling logic for each
 
 9. **User Interface Logic**
    - UI component interactions
@@ -112,13 +131,22 @@ Please write a detailed System Design Document that includes:
     - Security measures
     - Error handling strategy
 
-IMPORTANT REMINDERS:
-- The design must be SPECIFIC enough that an engineer can implement the COMPLETE, WORKING APPLICATION directly from this document
-- Include concrete examples, algorithms, and logic flows
-- Describe HOW features work, not just WHAT features exist
-- For games: specify game rules, mechanics, and logic in detail
-- For apps: specify business logic, workflows, and data processing in detail
-- Avoid vague descriptions - be concrete and actionable
+CRITICAL REMINDERS - YOU MUST FOLLOW THESE:
+- **DO NOT just describe architecture** - you MUST specify the actual game logic implementation
+- **DO NOT write vague descriptions** like "implement game loop" or "add collision detection"
+- **DO write specific details** like "Game loop runs at 60 FPS, each frame: 1) process input, 2) update player position based on direction and speed, 3) update ghost positions using A* pathfinding, 4) check collisions between player and walls/ghosts/pellets, 5) render all entities"
+- **For games**: You MUST include:
+  * Exact game loop implementation (what happens in each iteration)
+  * Exact collision detection algorithm (how coordinates are checked)
+  * Exact movement algorithms (how entities calculate their next position)
+  * Exact AI algorithms (how enemies make decisions, with pseudocode)
+  * Exact game state management (all states, transitions, data structures)
+  * Exact scoring/win/lose logic (when and how these are calculated)
+- **Include pseudocode or step-by-step algorithms** for all major game logic
+- **Specify exact data structures** - not just "game state object" but "game state object with properties: playerX, playerY, playerDirection, ghostPositions[], pelletGrid[][], score, lives, gameStatus"
+- The design must be SPECIFIC enough that an engineer can implement the COMPLETE, WORKING GAME directly from this document WITHOUT needing to design the game logic themselves
+- Describe HOW features work with exact implementation details, not just WHAT features exist
+- Avoid any vague or abstract descriptions - every game mechanic must have concrete implementation details
 
 Please be specific and technical. The design should be detailed enough for engineers to start coding immediately AND understand exactly how to implement the application logic.
 
