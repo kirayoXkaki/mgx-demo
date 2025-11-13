@@ -642,14 +642,20 @@ async def get_files(task_id: str):
                         print(f"   Workspace: {workspace}")
                         print(f"   Available projects: {available_projects[:5]}")
                         print(f"   Looking for: project_{task_id}")
-                    raise HTTPException(status_code=404, detail=f"Task or Project not found for task_id: {task_id}")
+                    # Return empty files instead of 404 for better UX
+                    print(f"⚠️ [API] Returning empty files for task_id: {task_id} (project not found)")
+                    return {"files": []}
     
     if not project_path:
-        raise HTTPException(status_code=404, detail="Project path not found")
+        # Return empty files instead of 404
+        print(f"⚠️ [API] No project_path found for task_id: {task_id}, returning empty files")
+        return {"files": []}
     
     # Check if project path exists
     if not Path(project_path).exists():
-        raise HTTPException(status_code=404, detail="Project files not found on disk")
+        # Return empty files instead of 404 if path doesn't exist
+        print(f"⚠️ [API] Project path exists in DB but not on disk: {project_path}, returning empty files")
+        return {"files": []}
     
     repo = ProjectRepo(project_path)
     
