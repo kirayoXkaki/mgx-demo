@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import Dict, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import shutil
 import json
 import subprocess
 import base64
+import io
+import zipfile
 
 from mgx_backend.software_company import generate_repo
 from mgx_backend.config import Config
@@ -873,6 +875,76 @@ async def download_project(task_id: str):
     if not project_path:
         raise HTTPException(status_code=404, detail="Project path not found")
     
+    # Try to download from Supabase Storage first
+    try:
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+        
+        if supabase_url and supabase_key:
+            # Get storage path from project extra_data
+            storage_path = None
+            db = get_db_manager()
+            
+            # Try to get from project extra_data
+            try:
+                from mgx_backend.database import ConversationHistoryModel, get_db, ProjectModel
+                db_session = next(get_db())
+                try:
+                    # Find conversation with this task_id
+                    all_conversations = db_session.query(ConversationHistoryModel).all()
+                    matching_conversation = None
+                    for conv in all_conversations:
+                        if conv.extra_data and isinstance(conv.extra_data, dict):
+                            if conv.extra_data.get("task_id") == task_id:
+                                matching_conversation = conv
+                                break
+                    
+                    if matching_conversation and matching_conversation.project_id:
+                        project = db.get_project(matching_conversation.project_id)
+                        if project and project.extra_data and isinstance(project.extra_data, dict):
+                            storage_path = project.extra_data.get("storage_path")
+                    
+                    # Also try direct project lookup if task_id is numeric
+                    if not storage_path:
+                        try:
+                            project_id = int(task_id)
+                            project = db.get_project(project_id)
+                            if project and project.extra_data and isinstance(project.extra_data, dict):
+                                storage_path = project.extra_data.get("storage_path")
+                        except (ValueError, TypeError):
+                            pass
+                finally:
+                    db_session.close()
+            except Exception as e:
+                print(f"⚠️ [API] Error getting storage path: {e}")
+            
+            # Try default storage path
+            if not storage_path:
+                storage_path = f"projects/{task_id}.zip"
+            
+            # Try to download from Supabase Storage
+            try:
+                from supabase import create_client, Client
+                supabase: Client = create_client(supabase_url, supabase_key)
+                
+                print(f"📥 [API] Attempting to download from Supabase Storage: {storage_path}")
+                file_data = supabase.storage.from_("projects").download(storage_path)
+                
+                if file_data:
+                    print(f"✅ [API] Successfully downloaded from Supabase Storage: {storage_path}")
+                    return StreamingResponse(
+                        io.BytesIO(file_data),
+                        media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="project_{task_id}.zip"'}
+                    )
+            except Exception as e:
+                print(f"⚠️ [API] Failed to download from Supabase Storage: {e}")
+                # Fall through to try local filesystem
+    except Exception as e:
+        print(f"⚠️ [API] Supabase Storage not available: {e}")
+        # Fall through to try local filesystem
+    
+    # Fallback to local filesystem
     project_path = Path(project_path)
     if not project_path.exists():
         # Try to provide more helpful error message
@@ -897,15 +969,15 @@ async def download_project(task_id: str):
                 else:
                     raise HTTPException(
                         status_code=404, 
-                        detail=f"Project files not found on disk. Path: {project_path}. This may happen if the project was deleted or the server was restarted."
+                        detail=f"Project files not found on disk or Supabase Storage. Path: {project_path}. This may happen if the project was deleted or the server was restarted."
                     )
         else:
             raise HTTPException(
                 status_code=404, 
-                detail=f"Project files not found on disk. Path: {project_path}. This may happen if the project was deleted or the server was restarted."
+                detail=f"Project files not found on disk or Supabase Storage. Path: {project_path}. This may happen if the project was deleted or the server was restarted."
             )
     
-    # Create zip file
+    # Create zip file from local filesystem
     zip_path = f"/tmp/{task_id}.zip"
     try:
         shutil.make_archive(zip_path.replace('.zip', ''), 'zip', project_path)
