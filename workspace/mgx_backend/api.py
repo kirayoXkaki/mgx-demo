@@ -23,7 +23,7 @@ from mgx_backend.roles import ProductManager, Architect, Engineer
 from mgx_backend.project_repo import ProjectRepo
 from mgx_backend.database import (
     get_db_manager, UserRegister, UserLogin, UserUpdate, UserResponse,
-    ConversationCreate, ConversationUpdate, ConversationResponse, UserModel
+    ConversationCreate, ConversationUpdate, ConversationResponse, UserModel, TaskModel
 )
 from mgx_backend.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -51,10 +51,9 @@ app.add_middleware(
     max_age=3600,
 )
 
-# Task storage
-tasks: Dict[str, dict] = {}
+# WebSocket connections (must stay in memory, cannot be serialized)
 websocket_connections: Dict[str, WebSocket] = {}
-# Message queue for messages sent before WebSocket connection is established
+# Message queue for messages sent before WebSocket connection is established (temporary, can stay in memory)
 pending_messages: Dict[str, list] = {}
 
 
@@ -84,8 +83,49 @@ class TaskStatus(BaseModel):
     updated_at: str
 
 
+def get_task_dict(task_id: str) -> dict:
+    """Get task as dictionary from database."""
+    db = get_db_manager()
+    task = db.get_task(task_id)
+    if not task:
+        return None
+    return {
+        "task_id": task.task_id,
+        "status": task.status,
+        "progress": task.progress,
+        "current_stage": task.current_stage,
+        "cost": task.cost,
+        "idea": task.idea,
+        "investment": task.investment,
+        "n_round": task.n_round,
+        "result": task.result,
+        "error": task.error,
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+        "updated_at": task.updated_at.isoformat() if task.updated_at else None
+    }
+
 async def send_progress(task_id: str, data: dict):
-    """Send progress update via WebSocket."""
+    """Send progress update via WebSocket and update database."""
+    # Update task in database if status/progress/cost changed
+    db = get_db_manager()
+    update_data = {}
+    if "status" in data:
+        update_data["status"] = data["status"]
+    if "progress" in data:
+        update_data["progress"] = data["progress"]
+    if "cost" in data:
+        update_data["cost"] = data["cost"]
+    if "stage" in data:
+        update_data["current_stage"] = data["stage"]
+    if "error" in data:
+        update_data["error"] = data["error"]
+    if "result" in data:
+        update_data["result"] = data["result"]
+    
+    if update_data:
+        db.update_task(task_id, **update_data)
+    
+    # Send via WebSocket
     if task_id in websocket_connections:
         try:
             await websocket_connections[task_id].send_json(data)
@@ -101,10 +141,9 @@ async def send_progress(task_id: str, data: dict):
 
 async def run_generation_task(task_id: str, idea: str, investment: float, n_round: int):
     """Run the generation task in background."""
+    db = get_db_manager()
     try:
-        tasks[task_id]["status"] = "running"
-        tasks[task_id]["current_stage"] = "Initializing"
-        tasks[task_id]["updated_at"] = datetime.now().isoformat()
+        db.update_task(task_id, status="running", current_stage="Initializing")
         
         await send_progress(task_id, {
             "type": "status",
@@ -123,7 +162,6 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
         team.hire([ProductManager(), Architect(), Engineer()])
         team.invest(investment)
         
-        tasks[task_id]["progress"] = 20
         await send_progress(task_id, {
             "type": "status",
             "stage": "ProductManager working",
@@ -180,14 +218,14 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
                 else:
                     progress = 75
             else:
-                progress = tasks[task_id].get("progress", 20)
+                task_dict = get_task_dict(task_id)
+                progress = task_dict.get("progress", 20) if task_dict else 20
             
-            tasks[task_id]["progress"] = progress
-            tasks[task_id]["current_stage"] = stage
+            # Progress updated via send_progress
             
             # Update cost in real-time from context
             current_cost = ctx.cost_manager.total_cost
-            tasks[task_id]["cost"] = current_cost
+            # Cost updated via send_progress
             
             # Include additional fields for chat and file updates
             progress_data = {
@@ -216,7 +254,12 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
             await send_progress(task_id, progress_data)
         
         # Run the team with progress callback
-        tasks[task_id]["current_stage"] = "Starting team collaboration..."
+        await send_progress(task_id, {
+            "type": "status",
+            "stage": "Starting team collaboration...",
+            "progress": 20,
+            "cost": ctx.cost_manager.total_cost
+        })
         history = await team.run(n_round=n_round, idea=idea, progress_callback=progress_callback)
         
         # Track final progress through completed messages
@@ -231,12 +274,20 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
                 stage = f"{msg.role}: Completed"
             
             progress = 20 + int((i / len(history)) * 60)
-            tasks[task_id]["progress"] = min(progress, 90)  # Cap at 90% until saving
-            tasks[task_id]["current_stage"] = stage
+            await send_progress(task_id, {
+                "type": "status",
+                "stage": stage,
+                "progress": min(progress, 90),
+                "cost": ctx.cost_manager.total_cost
+            })
         
         # Save outputs
-        tasks[task_id]["current_stage"] = "Saving project files..."
-        tasks[task_id]["progress"] = 90
+        await send_progress(task_id, {
+            "type": "status",
+            "stage": "Saving project files...",
+            "progress": 90,
+            "cost": ctx.cost_manager.total_cost
+        })
         await send_progress(task_id, {
             "type": "saving",
             "stage": "Saving project files...",
@@ -321,18 +372,21 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
                 traceback.print_exc()
                 raise
         
-        tasks[task_id]["status"] = "completed"
-        tasks[task_id]["progress"] = 100
-        tasks[task_id]["current_stage"] = "Completed"
-        tasks[task_id]["cost"] = ctx.cost_manager.total_cost
-        tasks[task_id]["result"] = {
+        result = {
             "project_path": str(ctx.project_path),
             "files": repo.srcs.all_files,
             "docs": repo.docs.all_files,
             "cost": ctx.cost_manager.total_cost,
             "tokens": ctx.cost_manager.total_tokens
         }
-        tasks[task_id]["updated_at"] = datetime.now().isoformat()
+        db.update_task(
+            task_id,
+            status="completed",
+            progress=100,
+            current_stage="Completed",
+            cost=ctx.cost_manager.total_cost,
+            result=result
+        )
         
         # Save project to database for persistence
         # Try to find existing project by task_id, or create new one
@@ -359,18 +413,17 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
             import traceback
             traceback.print_exc()
         
+        task_dict = get_task_dict(task_id)
         await send_progress(task_id, {
             "type": "complete",
             "status": "completed",
             "progress": 100,
-            "cost": tasks[task_id]["cost"],
-            "result": tasks[task_id]["result"]
+            "cost": task_dict["cost"] if task_dict else ctx.cost_manager.total_cost,
+            "result": result
         })
         
     except Exception as e:
-        tasks[task_id]["status"] = "failed"
-        tasks[task_id]["error"] = str(e)
-        tasks[task_id]["updated_at"] = datetime.now().isoformat()
+        db.update_task(task_id, status="failed", error=str(e))
         
         await send_progress(task_id, {
             "type": "error",
@@ -394,20 +447,9 @@ async def generate(request: GenerateRequest, background_tasks: BackgroundTasks):
     """Start a new generation task."""
     task_id = str(uuid.uuid4())
     
-    tasks[task_id] = {
-        "task_id": task_id,
-        "status": "pending",
-        "progress": 0,
-        "current_stage": "Queued",
-        "cost": 0.0,
-        "idea": request.idea,
-        "investment": request.investment,
-        "n_round": request.n_round,
-        "result": None,
-        "error": None,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
+    # Create task in database
+    db = get_db_manager()
+    db.create_task(task_id, request.idea, request.investment, request.n_round)
     
     # Start background task
     background_tasks.add_task(
@@ -424,10 +466,11 @@ async def generate(request: GenerateRequest, background_tasks: BackgroundTasks):
 @app.get("/api/status/{task_id}")
 async def get_status(task_id: str):
     """Get task status."""
-    if task_id not in tasks:
+    task_dict = get_task_dict(task_id)
+    if not task_dict:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    return tasks[task_id]
+    return task_dict
 
 
 @app.websocket("/api/ws/{task_id}")
@@ -438,16 +481,16 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
     
     try:
         # Send initial status (format matches frontend expectations)
-        if task_id in tasks:
-            task = tasks[task_id]
+        task_dict = get_task_dict(task_id)
+        if task_dict:
             await websocket.send_json({
                 "type": "status",
-                "status": task.get("status", "pending"),
-                "progress": task.get("progress", 0),
-                "stage": task.get("current_stage", "Queued"),
-                "cost": task.get("cost", 0.0),
-                "result": task.get("result"),
-                "error": task.get("error")
+                "status": task_dict.get("status", "pending"),
+                "progress": task_dict.get("progress", 0),
+                "stage": task_dict.get("current_stage", "Queued"),
+                "cost": task_dict.get("cost", 0.0),
+                "result": task_dict.get("result"),
+                "error": task_dict.get("error")
             })
         
         # Send any pending messages that were queued before connection
@@ -477,13 +520,15 @@ async def get_files(task_id: str):
     """Get list of generated files."""
     project_path = None
     
-    # First try to get from memory
-    if task_id in tasks:
-        task = tasks[task_id]
-        if task["status"] != "completed":
+    # Get task from database
+    task_dict = get_task_dict(task_id)
+    if task_dict:
+        if task_dict["status"] != "completed":
             raise HTTPException(status_code=400, detail="Task not completed")
-        project_path = task["result"]["project_path"]
-    else:
+        if task_dict.get("result") and task_dict["result"].get("project_path"):
+            project_path = task_dict["result"]["project_path"]
+    
+    if not project_path:
         # Try to get from database by project_id (if task_id is numeric)
         try:
             project_id = int(task_id)
@@ -618,14 +663,17 @@ async def get_files(task_id: str):
 @app.get("/api/download/{task_id}")
 async def download_project(task_id: str):
     """Download the generated project as a zip file."""
-    if task_id not in tasks:
+    task_dict = get_task_dict(task_id)
+    if not task_dict:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    task = tasks[task_id]
-    if task["status"] != "completed":
+    if task_dict["status"] != "completed":
         raise HTTPException(status_code=400, detail="Task not completed")
     
-    project_path = Path(task["result"]["project_path"])
+    if not task_dict.get("result") or not task_dict["result"].get("project_path"):
+        raise HTTPException(status_code=404, detail="Project path not found")
+    
+    project_path = Path(task_dict["result"]["project_path"])
     if not project_path.exists():
         raise HTTPException(status_code=404, detail="Project files not found")
     
@@ -643,19 +691,21 @@ async def download_project(task_id: str):
 @app.get("/api/tasks")
 async def list_tasks():
     """List all tasks."""
-    return {"tasks": list(tasks.values())}
+    db = get_db_manager()
+    tasks_list = db.list_tasks()
+    return {"tasks": [get_task_dict(task.task_id) for task in tasks_list]}
 
 
 @app.delete("/api/tasks/{task_id}")
 async def delete_task(task_id: str):
     """Delete a task."""
-    if task_id not in tasks:
+    task_dict = get_task_dict(task_id)
+    if not task_dict:
         raise HTTPException(status_code=404, detail="Task not found")
     
     # Delete project files
-    task = tasks[task_id]
-    if task.get("result") and task["result"].get("project_path"):
-        project_path = Path(task["result"]["project_path"])
+    if task_dict.get("result") and task_dict["result"].get("project_path"):
+        project_path = Path(task_dict["result"]["project_path"])
         if project_path.exists():
             shutil.rmtree(project_path)
     

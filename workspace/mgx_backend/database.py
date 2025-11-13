@@ -109,6 +109,25 @@ class ConversationHistoryModel(Base):
     project = relationship("ProjectModel")
 
 
+class TaskModel(Base):
+    """Task status table for storing generation tasks."""
+    __tablename__ = "tasks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(String(36), unique=True, index=True, nullable=False)  # UUID string
+    status = Column(String(20), default="pending")  # pending, running, completed, failed
+    progress = Column(Integer, default=0)  # 0-100
+    current_stage = Column(String(200), default="Queued")
+    cost = Column(Float, default=0.0)
+    idea = Column(Text, nullable=False)
+    investment = Column(Float, default=5.0)
+    n_round = Column(Integer, default=5)
+    result = Column(JSON, nullable=True)  # Store result as JSON
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # Pydantic Schemas for API
 class UserCreate(BaseModel):
     username: str
@@ -507,6 +526,75 @@ class DatabaseManager:
                 db.commit()
                 return True
             return False
+        finally:
+            db.close()
+    
+    # Task operations
+    def create_task(self, task_id: str, idea: str, investment: float = 5.0, n_round: int = 5) -> TaskModel:
+        """Create a new task."""
+        db = self.get_session()
+        try:
+            task = TaskModel(
+                task_id=task_id,
+                status="pending",
+                progress=0,
+                current_stage="Queued",
+                cost=0.0,
+                idea=idea,
+                investment=investment,
+                n_round=n_round,
+                result=None,
+                error=None
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            return task
+        finally:
+            db.close()
+    
+    def get_task(self, task_id: str) -> Optional[TaskModel]:
+        """Get a task by task_id."""
+        db = self.get_session()
+        try:
+            return db.query(TaskModel).filter(TaskModel.task_id == task_id).first()
+        finally:
+            db.close()
+    
+    def update_task(self, task_id: str, **kwargs) -> Optional[TaskModel]:
+        """Update a task."""
+        db = self.get_session()
+        try:
+            task = db.query(TaskModel).filter(TaskModel.task_id == task_id).first()
+            if task:
+                for key, value in kwargs.items():
+                    if hasattr(task, key):
+                        setattr(task, key, value)
+                task.updated_at = datetime.utcnow()
+                db.commit()
+                db.refresh(task)
+            return task
+        finally:
+            db.close()
+    
+    def delete_task(self, task_id: str) -> bool:
+        """Delete a task."""
+        db = self.get_session()
+        try:
+            task = db.query(TaskModel).filter(TaskModel.task_id == task_id).first()
+            if task:
+                db.delete(task)
+                db.commit()
+                return True
+            return False
+        finally:
+            db.close()
+    
+    def list_tasks(self, skip: int = 0, limit: int = 100) -> List[TaskModel]:
+        """List all tasks."""
+        db = self.get_session()
+        try:
+            return db.query(TaskModel).order_by(TaskModel.created_at.desc()).offset(skip).limit(limit).all()
         finally:
             db.close()
 
