@@ -57,14 +57,13 @@ export function ChatPanel() {
     }
   }
   
-  // Only auto-scroll when user sends a message (not when receiving messages)
+  // Auto-scroll to bottom whenever there's a new message
   useEffect(() => {
-    const lastMessage = messages[messages.length - 1]
-    if (lastMessage && lastMessage.role === 'user') {
-      // User sent a message, auto-scroll to see the response
+    if (messages.length > 0) {
+      // Scroll to bottom for any new message (user or assistant)
       setTimeout(() => scrollToBottom(), 100)
     }
-  }, [messages.filter(m => m.role === 'user').length])
+  }, [messages.length])
   
   // Track message count changes
   useEffect(() => {
