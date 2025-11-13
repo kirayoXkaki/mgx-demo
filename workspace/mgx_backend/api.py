@@ -394,24 +394,71 @@ async def run_generation_task(task_id: str, idea: str, investment: float, n_roun
         )
         
         # Save project to database for persistence
-        # Try to find existing project by task_id, or create new one
         try:
             db = get_db_manager()
             from mgx_backend.database import ProjectCreate
             
-            # Check if project already exists (might have been created earlier)
-            # For now, we'll use task_id as a way to identify projects
-            # In a real system, you'd want to link this to a user and conversation
-            project_name = f"Project {task_id[:8]}"
+            # Get task to find user_id if available
+            task_dict = get_task_dict(task_id)
+            user_id = task_dict.get("user_id") if task_dict else None
             
-            # Try to find project by checking if task_id is stored in extra_data
-            # For simplicity, we'll create/update based on task_id
-            # Note: In production, you'd want to link this to the user and conversation
-            print(f"💾 [API] Saving project to database: {project_name}, path: {ctx.project_path}")
+            # If no user_id in task, try to get from task's extra_data or use default user
+            if not user_id:
+                # Try to find a default user (first user in database) for anonymous tasks
+                # In production, you should always have a user_id
+                users = db.list_users(limit=1)
+                if users:
+                    user_id = users[0].id
+                    print(f"⚠️ [API] No user_id in task, using default user: {user_id}")
+                else:
+                    print(f"⚠️ [API] No users found in database, cannot create project")
+                    user_id = None
             
-            # For now, we'll store task_id in the result so it can be retrieved later
-            # The actual project_id will be the task_id converted to int if possible
-            # or we'll need to create a mapping
+            if user_id:
+                project_name = f"Project {task_id[:8]}"
+                project_description = idea[:200] if idea else f"Generated project {task_id[:8]}"
+                
+                print(f"💾 [API] Creating project in database: {project_name}, path: {ctx.project_path}, user_id: {user_id}")
+                
+                # Create project
+                project = db.create_project(
+                    ProjectCreate(
+                        name=project_name,
+                        description=project_description,
+                        idea=idea,
+                        investment=investment
+                    ),
+                    user_id=user_id
+                )
+                
+                # Update project status and path
+                db.update_project_status(
+                    project.id,
+                    "completed",
+                    project_path=str(ctx.project_path)
+                )
+                
+                # Update project cost
+                db.update_project_cost(
+                    project.id,
+                    ctx.cost_manager.total_cost
+                )
+                
+                # Store project_id and task_id in extra_data for easy lookup
+                from mgx_backend.database import ProjectModel, get_db
+                db_session = next(get_db())
+                try:
+                    db_project = db_session.query(ProjectModel).filter(ProjectModel.id == project.id).first()
+                    if db_project:
+                        extra_data = db_project.extra_data or {}
+                        extra_data["task_id"] = task_id
+                        db_project.extra_data = extra_data
+                        db_session.commit()
+                        print(f"✅ [API] Project saved successfully: project_id={project.id}, task_id={task_id}")
+                finally:
+                    db_session.close()
+            else:
+                print(f"⚠️ [API] Cannot create project: no user_id available")
             
         except Exception as e:
             print(f"⚠️ [API] Failed to save project to database: {e}")
