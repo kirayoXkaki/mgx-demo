@@ -11,8 +11,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code to mgx_backend directory
-# This creates the structure: /app/mgx_backend/api.py, /app/mgx_backend/software_company.py
-# So "from mgx_backend.software_company" will work
 RUN mkdir -p /app/mgx_backend
 COPY . /app/mgx_backend/
 
@@ -22,7 +20,6 @@ ENV PYTHONPATH=/app
 # Expose port
 EXPOSE 8000
 
-# Start command - use mgx_backend.api since files are in /app/mgx_backend/
-# Railway sets PORT environment variable, but provide fallback
-# Also ensure we're listening on 0.0.0.0 (all interfaces)
-CMD sh -c "PORT=\${PORT:-8000} && echo 'Starting on port: $PORT' && uvicorn mgx_backend.api:app --host 0.0.0.0 --port \$PORT"
+# Start command - explicitly set host and port
+# Use Python to ensure proper environment variable handling
+CMD python -c "import os; port = int(os.environ.get('PORT', 8000)); print(f'Starting server on 0.0.0.0:{port}'); import subprocess; subprocess.run(['uvicorn', 'mgx_backend.api:app', '--host', '0.0.0.0', '--port', str(port)])"
