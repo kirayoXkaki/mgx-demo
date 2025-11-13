@@ -541,10 +541,45 @@ async def get_files(task_id: str):
             project = db.get_project(project_id)
             if project and project.project_path:
                 project_path = project.project_path
-                print(f"📁 [API] Found project_path from database: {project_path}")
+                print(f"📁 [API] Found project_path from database by project_id: {project_path}")
             else:
+                # If project exists but no project_path, return empty files instead of 404
+                if project:
+                    print(f"⚠️ [API] Project {project_id} exists but has no project_path, returning empty files")
+                    return {"files": []}
                 raise HTTPException(status_code=404, detail="Project not found or no project_path")
         except (ValueError, TypeError):
+            # task_id is not numeric (UUID), try to find project by searching conversations
+            # First try to find conversation with this task_id in extra_data
+            db = get_db_manager()
+            try:
+                # Search all conversations for this task_id in extra_data
+                from mgx_backend.database import ConversationHistoryModel
+                from sqlalchemy.orm import Session
+                from mgx_backend.database import get_db
+                
+                db_session = next(get_db())
+                try:
+                    conversations = db_session.query(ConversationHistoryModel).filter(
+                        ConversationHistoryModel.extra_data.contains({"task_id": task_id})
+                    ).all()
+                    
+                    if conversations:
+                        # Get project_id from the first matching conversation
+                        conversation = conversations[0]
+                        if conversation.project_id:
+                            project = db.get_project(conversation.project_id)
+                            if project and project.project_path:
+                                project_path = project.project_path
+                                print(f"📁 [API] Found project_path from conversation extra_data: {project_path}")
+                        else:
+                            print(f"⚠️ [API] Conversation found but no project_id, task_id: {task_id}")
+                finally:
+                    db_session.close()
+            except Exception as e:
+                print(f"⚠️ [API] Error searching conversations for task_id {task_id}: {e}")
+            
+            # If still not found, try to find project by reconstructing path
             # task_id is not numeric (UUID), try to find project by reconstructing path
             # Project paths are typically: workspace/project_{task_id} or workspace/project_{project_name}
             import os

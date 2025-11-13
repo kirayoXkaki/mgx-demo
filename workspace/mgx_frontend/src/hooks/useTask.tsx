@@ -270,7 +270,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const loadProjectFiles = useCallback(async (taskId: string) => {
     try {
       console.log('📁 [Task] Loading project files for task:', taskId)
-      const response = await fetch(`/api/files/${taskId}`)
+      const response = await fetch(`${API_URL}/api/files/${taskId}`)
       if (!response.ok) {
         if (response.status === 404) {
           console.log('📁 [Task] Project files not found for task:', taskId)
