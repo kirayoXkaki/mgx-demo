@@ -709,7 +709,9 @@ async def delete_task(task_id: str):
         if project_path.exists():
             shutil.rmtree(project_path)
     
-    del tasks[task_id]
+    # Delete from database
+    db = get_db_manager()
+    db.delete_task(task_id)
     return {"message": "Task deleted"}
 
 
