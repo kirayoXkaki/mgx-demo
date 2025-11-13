@@ -12,14 +12,22 @@
 
 ### ⚠️ 重要：使用同一个 Supabase 项目
 
-**不需要创建新的数据库！** Supabase Storage 和 Database 都在同一个 Supabase 项目中：
+**不需要创建新的项目或数据库！** 
 
-- ✅ **Database**：存储结构化数据（users, projects, conversations 等表）
-- ✅ **Storage**：存储文件（项目 zip 文件）
+Supabase 的一个 **Project（项目）** 包含多个服务：
+
+- ✅ **Database（数据库）**：一个 PostgreSQL 数据库，存储结构化数据（users, projects, conversations 等表）
+- ✅ **Storage（存储）**：文件存储服务，存储文件（项目 zip 文件）
+- ✅ **Auth（认证）**：用户认证服务
+- ✅ **Realtime（实时）**：实时数据同步服务
+
+**所以：**
+- ❌ **不是**两个数据库
+- ✅ **是**一个 Project 包含多个服务（Database + Storage + 其他）
 
 你只需要：
-1. 使用**同一个 Supabase 项目**（已经配置了 Database 的那个）
-2. 添加 Storage 相关的环境变量
+1. 使用**同一个 Supabase Project**（已经配置了 Database 的那个）
+2. 添加 Storage 相关的环境变量（`SUPABASE_URL` 和 `SUPABASE_SERVICE_ROLE_KEY`）
 
 ### 1. 获取 Supabase 凭证
 
