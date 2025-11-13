@@ -554,24 +554,28 @@ async def get_files(task_id: str):
             db = get_db_manager()
             try:
                 # Search all conversations for this task_id in extra_data
-                from mgx_backend.database import ConversationHistoryModel
-                from sqlalchemy.orm import Session
-                from mgx_backend.database import get_db
+                from mgx_backend.database import ConversationHistoryModel, get_db
                 
                 db_session = next(get_db())
                 try:
-                    conversations = db_session.query(ConversationHistoryModel).filter(
-                        ConversationHistoryModel.extra_data.contains({"task_id": task_id})
-                    ).all()
+                    # Query all conversations and check extra_data manually (SQLite JSON support is limited)
+                    all_conversations = db_session.query(ConversationHistoryModel).all()
+                    matching_conversation = None
+                    for conv in all_conversations:
+                        if conv.extra_data and isinstance(conv.extra_data, dict):
+                            if conv.extra_data.get("task_id") == task_id:
+                                matching_conversation = conv
+                                break
                     
-                    if conversations:
-                        # Get project_id from the first matching conversation
-                        conversation = conversations[0]
-                        if conversation.project_id:
-                            project = db.get_project(conversation.project_id)
+                    if matching_conversation:
+                        # Get project_id from the matching conversation
+                        if matching_conversation.project_id:
+                            project = db.get_project(matching_conversation.project_id)
                             if project and project.project_path:
                                 project_path = project.project_path
                                 print(f"📁 [API] Found project_path from conversation extra_data: {project_path}")
+                            elif project:
+                                print(f"⚠️ [API] Project {matching_conversation.project_id} exists but has no project_path")
                         else:
                             print(f"⚠️ [API] Conversation found but no project_id, task_id: {task_id}")
                 finally:
@@ -580,7 +584,6 @@ async def get_files(task_id: str):
                 print(f"⚠️ [API] Error searching conversations for task_id {task_id}: {e}")
             
             # If still not found, try to find project by reconstructing path
-            # task_id is not numeric (UUID), try to find project by reconstructing path
             # Project paths are typically: workspace/project_{task_id} or workspace/project_{project_name}
             import os
             from mgx_backend.config import Config
