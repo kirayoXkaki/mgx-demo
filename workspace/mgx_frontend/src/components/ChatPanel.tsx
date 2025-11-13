@@ -63,18 +63,9 @@ export function ChatPanel() {
       // Scroll to bottom for any new message (user or assistant)
       setTimeout(() => scrollToBottom(), 100)
     }
-  }, [messages.length])
-  
-  // Track message count changes
-  useEffect(() => {
-    if (messages.length > lastMessageCountRef.current && !userScrolled) {
-      // New messages arrived, check if we should auto-scroll
-      setTimeout(() => {
-        checkScrollPosition()
-      }, 100)
-    }
+    // Update message count reference
     lastMessageCountRef.current = messages.length
-  }, [messages.length, userScrolled])
+  }, [messages.length])
   
   // Set up scroll listener to detect user scrolling
   useEffect(() => {
