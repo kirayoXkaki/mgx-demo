@@ -837,7 +837,7 @@ export function ChatPanel() {
       
       <form onSubmit={handleSubmit} className="flex-shrink-0 p-4 border-t border-pink-200 dark:border-pink-800 bg-gradient-to-r from-pink-50/50 to-purple-50/50 dark:from-pink-950/50 dark:to-purple-950/50 space-y-3">
         <Textarea
-          placeholder="Describe your project idea... (e.g., Create a 2048 game)"
+          placeholder="写一个吃豆人小游戏"
           value={idea}
           onChange={(e) => setIdea(e.target.value)}
           disabled={isGenerating}
